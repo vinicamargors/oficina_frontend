@@ -42,7 +42,7 @@ interface OSListResponse {
 
 type ViewMode = 'cards' | 'list';
 
-const PAGE_SIZE = 18;
+const PAGE_SIZE = 50;
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -242,12 +242,11 @@ export default function OrdensServico() {
     setLoading(true);
     setError('');
     try {
+      const skip = page * PAGE_SIZE;
       const params = new URLSearchParams({
         empresa_id: user.empresa_id,
-        skip: String(page * PAGE_SIZE),
+        skip: String(skip),
         limit: String(PAGE_SIZE),
-        order_by: 'data_abertura',
-        order_dir: 'desc',
       });
 
       if (statusFilter !== 'Todos') params.set('status', statusFilter);
@@ -256,7 +255,7 @@ export default function OrdensServico() {
       const raw = await apiGet<OSListResponse | OSItem[]>(`/os/?${params.toString()}`);
 
       if (Array.isArray(raw)) {
-        // fallback: array simples sem paginação do backend
+        // fallback: backend retornou array simples (sem paginação)
         const sorted = [...raw].sort(
           (a, b) => new Date(b.data_abertura).getTime() - new Date(a.data_abertura).getTime()
         );
@@ -309,6 +308,8 @@ export default function OrdensServico() {
   const totalPages = Math.max(1, Math.ceil(totalCount / PAGE_SIZE));
   const hasPrev = currentPage > 0;
   const hasNext = currentPage < totalPages - 1;
+  const firstItem = currentPage * PAGE_SIZE + 1;
+  const lastItem = Math.min((currentPage + 1) * PAGE_SIZE, totalCount);
 
   // ── Render: Loading ─────────────────────────────────────────────────────
 
@@ -667,14 +668,15 @@ export default function OrdensServico() {
 
       {/* Paginação */}
       {totalPages > 1 && (
-        <div className="flex items-center justify-between pt-2">
+        <div className="flex items-center justify-between pt-2 border-t border-zinc-800/50">
           <p className="text-xs text-zinc-500 tabular-nums">
-            Página{' '}
-            <span className="text-zinc-300 font-semibold">{currentPage + 1}</span>{' '}
-            de{' '}
-            <span className="text-zinc-300 font-semibold">{totalPages}</span>
-            {' · '}
-            <span className="text-zinc-300 font-semibold">{totalCount}</span> OS no total
+            Mostrando{' '}
+            <span className="text-zinc-300 font-semibold">{firstItem}</span>
+            {' – '}
+            <span className="text-zinc-300 font-semibold">{lastItem}</span>
+            {' de '}
+            <span className="text-zinc-300 font-semibold">{totalCount}</span>
+            {' OS'}
           </p>
           <div className="flex items-center gap-2">
             <button
@@ -685,6 +687,9 @@ export default function OrdensServico() {
               <ChevronLeft className="w-3.5 h-3.5" />
               Anterior
             </button>
+            <span className="text-zinc-500 text-xs tabular-nums px-1">
+              {currentPage + 1} / {totalPages}
+            </span>
             <button
               onClick={() => setCurrentPage((p) => p + 1)}
               disabled={!hasNext}

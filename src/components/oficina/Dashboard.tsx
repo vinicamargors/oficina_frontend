@@ -14,13 +14,16 @@ import {
   Clock,
   Activity,
   BarChart3,
-  Users,
+  Users
 } from 'lucide-react';
 import { apiGet } from '@/lib/api';
 import { useAuthStore } from '@/stores/auth';
 import { useAppStore } from '@/stores/app';
 
 // ── Types (matching real API response) ───────────────────────────────────────
+interface OSListResponse {
+  total: number;
+}
 
 interface UltimaOS {
   id: string;
@@ -42,11 +45,11 @@ interface DashboardData {
 // ── Status Badge Config ─────────────────────────────────────────────────────
 
 const statusConfig: Record<string, { label: string; color: string; border: string; bg: string }> = {
-  ORCAMENTO: { label: 'Orçamento', color: 'text-yellow-500', border: 'border-yellow-500/20', bg: 'bg-yellow-500/10' },
-  EXECUCAO: { label: 'Execução', color: 'text-blue-400', border: 'border-blue-500/20', bg: 'bg-blue-500/10' },
-  AGUARDANDO_PECA: { label: 'Ag. Peça', color: 'text-orange-400', border: 'border-orange-500/20', bg: 'bg-orange-500/10' },
-  FINALIZADO: { label: 'Pronto', color: 'text-emerald-400', border: 'border-emerald-500/20', bg: 'bg-emerald-500/10' },
-  PAGO: { label: 'Pago', color: 'text-emerald-300', border: 'border-emerald-500/30', bg: 'bg-emerald-600/15' },
+  ORCAMENTO: { label: 'Orçamento', color: 'text-zinc-400', border: 'border-zinc-500/20', bg: 'bg-zinc-500/10' },
+  EXECUCAO: { label: 'Execução', color: 'text-blue-500', border: 'border-blue-500/20', bg: 'bg-blue-500/10' },
+  AGUARDANDO_PECA: { label: 'Ag. Peça', color: 'text-orange-500', border: 'border-orange-500/20', bg: 'bg-orange-500/10' },
+  FINALIZADO: { label: 'Pronto', color: 'text-emerald-500', border: 'border-emerald-500/20', bg: 'bg-emerald-500/10' },
+  PAGO: { label: 'Pago', color: 'text-yellow-400', border: 'border-yellow-400/30', bg: 'bg-yellow-500/10' },
 };
 
 function StatusBadge({ status }: { status: string }) {
@@ -83,7 +86,7 @@ function KPISkeleton() {
   return (
     <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4">
       {[...Array(4)].map((_, i) => (
-        <div key={i} className="bg-gradient-to-br from-zinc-900/80 to-zinc-900/40 border border-zinc-800 rounded-xl p-4 md:p-6 space-y-3 animate-pulse">
+        <div key={i} className="bg-linear-to-br from-zinc-900/80 to-zinc-900/40 border border-zinc-800 rounded-xl p-4 md:p-6 space-y-3 animate-pulse">
           <div className="flex justify-between items-start">
             <div className="space-y-2 flex-1">
               <div className="h-3 bg-zinc-800 rounded w-20" />
@@ -108,11 +111,11 @@ function TableSkeleton() {
       <div className="divide-y divide-zinc-800/50">
         {[...Array(5)].map((_, i) => (
           <div key={i} className="flex items-center gap-4 px-5 py-4 animate-pulse">
-            <div className="h-4 bg-zinc-800 rounded w-20 flex-shrink-0" />
-            <div className="h-4 bg-zinc-800 rounded w-28 flex-shrink-0 hidden md:block" />
+            <div className="h-4 bg-zinc-800 rounded w-20 shrink-0" />
+            <div className="h-4 bg-zinc-800 rounded w-28 shrink-0 hidden md:block" />
             <div className="h-4 bg-zinc-800 rounded w-32 flex-1" />
-            <div className="h-6 bg-zinc-800 rounded w-20 flex-shrink-0 hidden sm:block" />
-            <div className="h-4 bg-zinc-800 rounded w-20 flex-shrink-0 text-right hidden lg:block" />
+            <div className="h-6 bg-zinc-800 rounded w-20 shrink-0 hidden sm:block" />
+            <div className="h-4 bg-zinc-800 rounded w-20 shrink-0 text-right hidden lg:block" />
           </div>
         ))}
       </div>
@@ -161,11 +164,11 @@ function relativeTimeColor(dateStr: string): string {
 }
 
 const timelineDotColor: Record<string, string> = {
-  ORCAMENTO: 'bg-yellow-500',
-  EXECUCAO: 'bg-blue-400',
-  AGUARDANDO_PECA: 'bg-orange-400',
-  FINALIZADO: 'bg-emerald-400',
-  PAGO: 'bg-emerald-300',
+  ORCAMENTO: 'bg-zinc-400',
+  EXECUCAO: 'bg-blue-500',
+  AGUARDANDO_PECA: 'bg-orange-500',
+  FINALIZADO: 'bg-emerald-500',
+  PAGO: 'bg-yellow-400',
 };
 
 // ── Main Component ─────────────────────────────────────────────────────────
@@ -179,9 +182,55 @@ export default function Dashboard() {
   const [error, setError] = useState('');
   const [veiculosRevisao, setVeiculosRevisao] = useState<Array<{id: string; placa: string; modelo: string; km_atual?: number}>>([]);
   const [barAnimated, setBarAnimated] = useState(false);
+  const [metrics, setMetrics] = useState({
+    todos: 0,
+    orcamento: 0,
+    execucao: 0,
+    peca: 0,
+    finalizado: 0
+  });
 
-  // ── Live Clock ──
   const [now, setNow] = useState(new Date());
+
+  // ── Fetch Global Real Metrics ──
+  const fetchMetrics = useCallback(async () => {
+    if (!user?.empresa_id) return;
+    try {
+      const endpoints = [
+        { key: 'todos', status: 'Todos' },
+        { key: 'orcamento', status: 'ORCAMENTO' },
+        { key: 'execucao', status: 'EXECUCAO' },
+        { key: 'peca', status: 'AGUARDANDO_PECA' },
+        { key: 'finalizado', status: 'FINALIZADO' }
+      ];
+
+      const promises = endpoints.map(async (ep) => {
+        const params = new URLSearchParams({
+          empresa_id: user.empresa_id,
+          limit: '1',
+        });
+        if (ep.status !== 'Todos') params.set('status', ep.status);
+        const raw = await apiGet<OSListResponse>(`/os/?${params.toString()}`);
+        return { key: ep.key, total: raw.total ?? 0 };
+      });
+
+      const results = await Promise.all(promises);
+      const newMetrics = { todos: 0, orcamento: 0, execucao: 0, peca: 0, finalizado: 0 };
+      results.forEach((r) => {
+        newMetrics[r.key as keyof typeof newMetrics] = r.total;
+      });
+
+      setMetrics(newMetrics);
+    } catch (err) {
+      console.error('Erro ao buscar métricas da Home:', err);
+    }
+  }, [user?.empresa_id]);
+
+  // ── Initial Loads ──
+  useEffect(() => {
+    fetchMetrics();
+  }, [fetchMetrics]);
+
   useEffect(() => {
     const interval = setInterval(() => setNow(new Date()), 1000);
     return () => clearInterval(interval);
@@ -216,13 +265,11 @@ export default function Dashboard() {
     load();
   }, [user?.empresa_id]);
 
-  // ── Status bar animation trigger ──
   useEffect(() => {
     const timer = setTimeout(() => setBarAnimated(true), 300);
     return () => clearTimeout(timer);
   }, []);
 
-  // ── Fetch vehicles for Revisões Pendentes ──
   const fetchVeiculosRevisao = useCallback(async () => {
     if (!user?.empresa_id) return;
     try {
@@ -240,16 +287,16 @@ export default function Dashboard() {
 
   const firstName = user?.nome?.split(' ')[0] || 'Usuário';
 
-  // ── Animated KPI values ──
-  const animTotalAbertas = useAnimatedValue(data?.total_abertas ?? 0);
-  const animExecucao = useAnimatedValue(data?.status_counts?.['EXECUCAO'] ?? 0);
-  const animOrcamento = useAnimatedValue(data?.status_counts?.['ORCAMENTO'] ?? 0);
+  // ── Animated KPI values using REAL METRICS ──
+  const animTotalAbertas = useAnimatedValue(metrics.todos);
+  const animExecucao = useAnimatedValue(metrics.execucao);
+  const animOrcamento = useAnimatedValue(metrics.orcamento);
   const animEstoqueCritico = useAnimatedValue(data?.estoque_critico_count ?? 0);
 
-  // ── KPI Card definitions ──
+// ── KPI Card definitions ──
   const kpiCards = [
     {
-      label: 'Carros no Pátio',
+      label: 'OS Abertas',
       value: animTotalAbertas,
       icon: <CarFront className="w-5 h-5" />,
       color: 'text-zinc-100',
@@ -257,10 +304,10 @@ export default function Dashboard() {
       bgColor: 'bg-zinc-800/80',
       borderColor: 'hover:border-zinc-600/50',
       sub: 'Volume total ativo',
-      progress: (data?.total_abertas ?? 0) / 20,
+      progress: metrics.todos / 20,
       progressColor: 'bg-zinc-100',
       accentColor: 'zinc',
-      trend: (data?.total_abertas ?? 0) > 10
+      trend: metrics.todos > 10
         ? { type: 'up' as const, text: '↑ Volume alto', colorClass: 'text-yellow-400' }
         : { type: 'neutral' as const, text: '→ Normal', colorClass: 'text-zinc-500' },
     },
@@ -268,29 +315,29 @@ export default function Dashboard() {
       label: 'Em Execução',
       value: animExecucao,
       icon: <Wrench className="w-5 h-5" />,
-      color: 'text-blue-400',
+      color: 'text-blue-500',
       iconColor: 'text-blue-500',
       bgColor: 'bg-blue-500/10',
       borderColor: 'hover:border-blue-500/30',
       sub: 'Mecânicos trabalhando',
       accentColor: 'blue',
-      trend: (data?.status_counts?.['EXECUCAO'] ?? 0) > 0
-        ? { type: 'neutral' as const, text: '⚡ Em andamento', colorClass: 'text-blue-400' }
+      trend: metrics.execucao > 0
+        ? { type: 'neutral' as const, text: '⚡ Em andamento', colorClass: 'text-blue-500' }
         : { type: 'neutral' as const, text: '— Sem atividade', colorClass: 'text-zinc-500' },
     },
     {
       label: 'Orçamentos',
       value: animOrcamento,
       icon: <FileText className="w-5 h-5" />,
-      color: 'text-yellow-400',
-      iconColor: 'text-yellow-500',
-      bgColor: 'bg-yellow-500/10',
-      borderColor: 'hover:border-yellow-500/30',
+      color: 'text-zinc-400',
+      iconColor: 'text-zinc-400',
+      bgColor: 'bg-zinc-500/10',
+      borderColor: 'hover:border-zinc-500/30',
       sub: 'Aguardando aprovação',
-      accentColor: 'yellow',
-      trend: (data?.status_counts?.['ORCAMENTO'] ?? 0) > 0
-        ? { type: 'neutral' as const, text: '⏳ Pendente', colorClass: 'text-yellow-400' }
-        : { type: 'up' as const, text: '✓ Nenhum pendente', colorClass: 'text-emerald-400' },
+      accentColor: 'zinc',
+      trend: metrics.orcamento > 0
+        ? { type: 'neutral' as const, text: '⏳ Pendente', colorClass: 'text-zinc-400' }
+        : { type: 'up' as const, text: '✓ Nenhum pendente', colorClass: 'text-emerald-500' },
     },
     {
       label: 'Estoque Crítico',
@@ -350,11 +397,11 @@ export default function Dashboard() {
   };
 
   const accentLineColors: Record<string, string> = {
-    zinc: 'bg-gradient-to-r from-transparent via-zinc-400/30 to-transparent',
-    blue: 'bg-gradient-to-r from-transparent via-blue-400/30 to-transparent',
-    yellow: 'bg-gradient-to-r from-transparent via-yellow-400/30 to-transparent',
-    red: 'bg-gradient-to-r from-transparent via-red-400/30 to-transparent',
-    emerald: 'bg-gradient-to-r from-transparent via-emerald-400/30 to-transparent',
+    zinc: 'bg-linear-to-r from-transparent via-zinc-400/30 to-transparent',
+    blue: 'bg-linear-to-r from-transparent via-blue-400/30 to-transparent',
+    yellow: 'bg-linear-to-r from-transparent via-yellow-400/30 to-transparent',
+    red: 'bg-linear-to-r from-transparent via-red-400/30 to-transparent',
+    emerald: 'bg-linear-to-r from-transparent via-emerald-400/30 to-transparent',
   };
 
   const hoverShadowColors: Record<string, string> = {
@@ -382,7 +429,7 @@ export default function Dashboard() {
         <div className="flex flex-col items-start sm:items-end gap-3">
           <button
             onClick={() => navigate('nova-os')}
-            className="flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-3 px-6 rounded-lg transition-all duration-200 active:scale-95 shadow-lg shadow-emerald-600/20 w-full sm:w-auto"
+            className="flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-3 px-6 rounded-lg transition-all duration-200 active:scale-95 shadow-lg shadow-emerald-600/20 w-full sm:w-auto cursor-pointer"
           >
             <Plus className="w-5 h-5" />
             <span>Abrir Nova OS</span>
@@ -403,7 +450,7 @@ export default function Dashboard() {
       {/* ── Error Banner ── */}
       {error && (
         <div className="flex items-center gap-3 p-4 rounded-xl bg-red-500/10 border border-red-500/20 text-red-400 text-sm animate-in fade-in slide-in-from-top-2 duration-300">
-          <AlertTriangle className="w-5 h-5 flex-shrink-0" />
+          <AlertTriangle className="w-5 h-5 shrink-0" />
           <span>{error}</span>
         </div>
       )}
@@ -429,7 +476,7 @@ export default function Dashboard() {
           {kpiCards.map((card) => (
             <div
               key={card.label}
-              className={`relative bg-gradient-to-br from-zinc-900/80 to-zinc-900/40 border border-zinc-800 rounded-xl p-3 md:p-5 flex flex-col justify-between transition-all duration-300 hover:scale-[1.02] ${card.borderColor} ${hoverShadowColors[card.accentColor] ?? ''} hover:shadow-lg group`}
+              className={`relative bg-linear-to-br from-zinc-900/80 to-zinc-900/40 border border-zinc-800 rounded-xl p-3 md:p-5 flex flex-col justify-between transition-all duration-300 hover:scale-[1.02] ${card.borderColor} ${hoverShadowColors[card.accentColor] ?? ''} hover:shadow-lg group`}
             >
               {/* Top accent line */}
               <div className={`absolute top-0 left-4 right-4 h-px ${accentLineColors[card.accentColor] ?? ''}`} />
@@ -478,7 +525,7 @@ export default function Dashboard() {
 
       {/* ── Quick Actions Grid ── */}
       {!loading && (
-        <div className="bg-gradient-to-br from-zinc-900/80 to-zinc-900/40 border border-zinc-800/60 rounded-2xl p-4 md:p-6 animate-in fade-in slide-in-from-bottom-1 duration-500">
+        <div className="bg-linear-to-br from-zinc-900/80 to-zinc-900/40 border border-zinc-800/60 rounded-2xl p-4 md:p-6 animate-in fade-in slide-in-from-bottom-1 duration-500">
           <h2 className="text-sm font-bold text-zinc-400 uppercase tracking-wider mb-3 md:mb-4">Ações Rápidas</h2>
           <div className="grid grid-cols-2 gap-3 stagger-children">
             {quickActions.map((action) => {
@@ -489,12 +536,12 @@ export default function Dashboard() {
                   onClick={action.action}
                   className="bg-zinc-900/50 border border-zinc-800 rounded-xl p-4 hover:border-zinc-700 hover:bg-zinc-900/80 transition-all cursor-pointer group text-left relative overflow-hidden"
                 >
-                  <div className={`p-2.5 rounded-lg ${styles.iconBg} border ${styles.iconBorder} inline-flex mb-2.5 transition-transform group-hover:scale-110 ${action.label === 'Nova OS' && (data?.total_abertas ?? 0) > 0 ? 'animate-pulse-dot' : ''}`}>
+                  <div className={`p-2.5 rounded-lg ${styles.iconBg} border ${styles.iconBorder} inline-flex mb-2.5 transition-transform group-hover:scale-110 ${action.label === 'Nova OS' && metrics.todos > 0 ? 'animate-pulse-dot' : ''}`}>
                     <span className={styles.iconColor}>{action.icon}</span>
                   </div>
                   <p className="text-white font-semibold text-sm">{action.label}</p>
                   <p className="text-zinc-500 text-xs mt-0.5">{action.description}</p>
-                  {action.label === 'Nova OS' && (data?.total_abertas ?? 0) > 0 && (
+                  {action.label === 'Nova OS' && metrics.todos > 0 && (
                     <span className="absolute top-2.5 right-2.5 text-[8px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-full bg-emerald-500/15 text-emerald-400 border border-emerald-500/20">
                       Mais usado
                     </span>
@@ -508,7 +555,7 @@ export default function Dashboard() {
 
       {/* ── Revisões Pendentes ── */}
       {!loading && veiculosRevisao.length > 0 && (
-        <div className="bg-gradient-to-br from-zinc-900/80 to-zinc-900/40 border border-zinc-800/60 rounded-2xl p-4 md:p-6 animate-in fade-in slide-in-from-bottom-1 duration-500">
+        <div className="bg-linear-to-br from-zinc-900/80 to-zinc-900/40 border border-zinc-800/60 rounded-2xl p-4 md:p-6 animate-in fade-in slide-in-from-bottom-1 duration-500">
           <div className="flex items-center justify-between mb-3 md:mb-4">
             <div className="flex items-center gap-2.5">
               <div className="w-8 h-8 rounded-lg bg-amber-500/10 border border-amber-500/20 flex items-center justify-center">
@@ -521,7 +568,7 @@ export default function Dashboard() {
             </div>
             <button
               onClick={() => navigate('veiculos')}
-              className="text-xs font-medium text-amber-400 hover:text-amber-300 flex items-center gap-1 transition-colors group"
+              className="text-xs font-medium text-amber-400 hover:text-amber-300 flex items-center gap-1 transition-colors group cursor-pointer"
             >
               Ver todos
               <ArrowRight className="w-3.5 h-3.5 transition-transform group-hover:translate-x-0.5" />
@@ -549,7 +596,7 @@ export default function Dashboard() {
 
       {/* ── Status Distribution ── */}
       {!loading && data?.status_counts && (
-        <div className="bg-gradient-to-br from-zinc-900/80 to-zinc-900/40 border border-zinc-800/60 rounded-2xl overflow-hidden animate-in fade-in slide-in-from-bottom-1 duration-500">
+        <div className="bg-linear-to-br from-zinc-900/80 to-zinc-900/40 border border-zinc-800/60 rounded-2xl overflow-hidden animate-in fade-in slide-in-from-bottom-1 duration-500">
           <div className="flex items-center gap-2.5 px-5 py-3.5 border-b border-zinc-800/50">
             <div className="w-8 h-8 rounded-lg bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center">
               <BarChart3 className="w-4 h-4 text-emerald-400" />
@@ -567,18 +614,18 @@ export default function Dashboard() {
                 );
               }
               const STATUS_BAR_COLORS: Record<string, string> = {
-                ORCAMENTO: 'bg-yellow-500',
-                EXECUCAO: 'bg-blue-400',
-                AGUARDANDO_PECA: 'bg-orange-400',
-                FINALIZADO: 'bg-emerald-400',
-                PAGO: 'bg-emerald-300',
+                ORCAMENTO: 'bg-zinc-400',
+                EXECUCAO: 'bg-blue-500',
+                AGUARDANDO_PECA: 'bg-orange-500',
+                FINALIZADO: 'bg-emerald-500',
+                PAGO: 'bg-yellow-400',
               };
               const STATUS_GLOW: Record<string, string> = {
-                ORCAMENTO: 'shadow-yellow-500/30',
-                EXECUCAO: 'shadow-blue-400/30',
-                AGUARDANDO_PECA: 'shadow-orange-400/30',
-                FINALIZADO: 'shadow-emerald-400/30',
-                PAGO: 'shadow-emerald-300/30',
+                ORCAMENTO: 'shadow-zinc-400/30',
+                EXECUCAO: 'shadow-blue-500/30',
+                AGUARDANDO_PECA: 'shadow-orange-500/30',
+                FINALIZADO: 'shadow-emerald-500/30',
+                PAGO: 'shadow-yellow-400/30',
               };
               const STATUS_LABELS: Record<string, string> = {
                 ORCAMENTO: 'Orçamento',
@@ -654,7 +701,7 @@ export default function Dashboard() {
               <button
                 key={item.id}
                 onClick={() => navigate('estoque')}
-                className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-red-500/10 border border-red-500/20 text-red-300 text-xs font-medium hover:bg-red-500/20 transition-colors"
+                className="inline-flex cursor-pointer items-center gap-2 px-3 py-1.5 rounded-lg bg-red-500/10 border border-red-500/20 text-red-300 text-xs font-medium hover:bg-red-500/20 transition-colors"
               >
                 <Package className="w-3 h-3" />
                 {item.nome}
@@ -667,7 +714,7 @@ export default function Dashboard() {
 
       {/* ── Latest OS Table ── */}
       {!loading && (
-        <div className="bg-gradient-to-br from-zinc-900/80 to-zinc-900/40 border border-zinc-800/60 rounded-2xl overflow-hidden">
+        <div className="bg-linear-to-br from-zinc-900/80 to-zinc-900/40 border border-zinc-800/60 rounded-2xl overflow-hidden">
           <div className="flex items-center justify-between p-4 md:p-5 border-b border-zinc-800/50">
             <div className="flex items-center gap-2">
               <Clock className="w-4 h-4 text-zinc-400" />
@@ -680,7 +727,7 @@ export default function Dashboard() {
             </div>
             <button
               onClick={() => navigate('ordens-servico')}
-              className="text-xs md:text-sm font-medium text-emerald-400 hover:text-emerald-300 flex items-center gap-1 transition-colors group"
+              className="text-xs md:text-sm font-medium text-emerald-400 hover:text-emerald-300 flex items-center gap-1 transition-colors group cursor-pointer"
             >
               Ver todas
               <ArrowRight className="w-3.5 h-3.5 transition-transform group-hover:translate-x-0.5" />
@@ -691,7 +738,7 @@ export default function Dashboard() {
           <div className="sm:hidden max-h-96 overflow-y-auto custom-scrollbar">
             {!data?.ultimas_os || data.ultimas_os.length === 0 ? (
               <div className="p-8 text-center relative overflow-hidden">
-                <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-emerald-500/5 via-zinc-950/0 to-zinc-950/0" />
+                <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,var(--tw-gradient-stops))] from-emerald-500/5 via-zinc-950/0 to-zinc-950/0" />
                 <div className="relative z-10">
                   <div className="w-20 h-20 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center mx-auto mb-4">
                     <Wrench className="w-10 h-10 text-emerald-500/60" />
@@ -700,7 +747,7 @@ export default function Dashboard() {
                   <p className="text-zinc-600 text-xs mb-4">O pátio está vazio</p>
                   <button
                     onClick={() => navigate('nova-os')}
-                    className="inline-flex items-center gap-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-sm py-2.5 px-5 rounded-lg transition-all duration-200 active:scale-95 shadow-lg shadow-emerald-600/20"
+                    className="inline-flex cursor-pointer items-center gap-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-sm py-2.5 px-5 rounded-lg transition-all duration-200 active:scale-95 shadow-lg shadow-emerald-600/20"
                   >
                     <Plus className="w-4 h-4" />
                     <span>Crie sua primeira OS</span>
@@ -713,7 +760,7 @@ export default function Dashboard() {
                   <button
                     key={os.id}
                     onClick={() => navigate('detalhes-os', { id: os.id })}
-                    className="w-full text-left p-4 hover:bg-zinc-800/30 transition-colors active:bg-zinc-800/50"
+                    className="w-full text-left p-4 hover:bg-zinc-800/30 transition-colors active:bg-zinc-800/50 cursor-pointer"
                   >
                     <div className="flex items-center justify-between mb-2">
                       <span className="text-white font-medium text-sm">{os.clientes?.nome || 'N/A'}</span>
@@ -754,7 +801,7 @@ export default function Dashboard() {
                   <tr>
                     <td colSpan={5} className="px-5 py-12 text-center">
                       <div className="relative inline-flex flex-col items-center">
-                        <div className="absolute -inset-12 bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-emerald-500/5 via-transparent to-transparent pointer-events-none" />
+                        <div className="absolute -inset-12 bg-[radial-gradient(ellipse_at_center,var(--tw-gradient-stops))] from-emerald-500/5 via-transparent to-transparent pointer-events-none" />
                         <div className="relative z-10 flex flex-col items-center">
                           <div className="w-20 h-20 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center mb-4">
                             <Wrench className="w-10 h-10 text-emerald-500/60" />
@@ -763,7 +810,7 @@ export default function Dashboard() {
                           <p className="text-zinc-600 text-xs mb-4">Abra uma nova ordem de serviço</p>
                           <button
                             onClick={() => navigate('nova-os')}
-                            className="inline-flex items-center gap-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-sm py-2.5 px-5 rounded-lg transition-all duration-200 active:scale-95 shadow-lg shadow-emerald-600/20"
+                            className="inline-flex cursor-pointer items-center gap-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-sm py-2.5 px-5 rounded-lg transition-all duration-200 active:scale-95 shadow-lg shadow-emerald-600/20"
                           >
                             <Plus className="w-4 h-4" />
                             <span>Crie sua primeira OS</span>
@@ -784,7 +831,7 @@ export default function Dashboard() {
                         <div className="text-[10px] text-zinc-600 font-mono">#{os.id.substring(0, 8)}</div>
                       </td>
                       <td className="px-5 py-3.5">
-                        <div className="text-white font-medium truncate max-w-[180px]">{os.clientes?.nome || 'N/A'}</div>
+                        <div className="text-white font-medium truncate max-w-45">{os.clientes?.nome || 'N/A'}</div>
                         <div className="text-[10px] text-zinc-500">{os.clientes?.telefone || ''}</div>
                       </td>
                       <td className="px-5 py-3.5">
@@ -808,7 +855,7 @@ export default function Dashboard() {
 
       {/* ── Activity Timeline ── */}
       {!loading && data?.ultimas_os && data.ultimas_os.length > 0 && (
-        <div className="bg-gradient-to-br from-zinc-900/80 to-zinc-900/40 border border-zinc-800/60 rounded-2xl overflow-hidden animate-in fade-in slide-in-from-bottom-2 duration-500" style={{ animationDelay: '200ms' }}>
+        <div className="bg-linear-to-br from-zinc-900/80 to-zinc-900/40 border border-zinc-800/60 rounded-2xl overflow-hidden animate-in fade-in slide-in-from-bottom-2 duration-500" style={{ animationDelay: '200ms' }}>
           <div className="flex items-center gap-2 p-4 md:p-5 border-b border-zinc-800/50">
             <div className="p-1.5 rounded-lg bg-zinc-800">
               <Activity className="w-4 h-4 text-emerald-400" />
@@ -818,7 +865,7 @@ export default function Dashboard() {
           <div className="p-4 md:p-5">
             <div className="relative">
               {/* Timeline line with gradient */}
-              <div className="absolute left-[5px] top-2 bottom-2 w-0.5 bg-gradient-to-b from-emerald-500/40 via-yellow-500/20 to-zinc-800" />
+              <div className="absolute left-1.25 top-2 bottom-2 w-0.5 bg-linear-to-b from-emerald-500/40 via-yellow-500/20 to-zinc-800" />
               <div className="space-y-4">
                 {data.ultimas_os.slice(0, 6).map((os, i) => {
                   const statusUpper = os.status.toUpperCase();
@@ -866,7 +913,7 @@ export default function Dashboard() {
               <div className="mt-4 pt-3 border-t border-zinc-800/50">
                 <button
                   onClick={() => navigate('ordens-servico')}
-                  className="text-xs font-medium text-emerald-400 hover:text-emerald-300 flex items-center gap-1 transition-colors group"
+                  className="text-xs font-medium text-emerald-400 hover:text-emerald-300 flex items-center gap-1 transition-colors group cursor-pointer"
                 >
                   Ver tudo
                   <ArrowRight className="w-3.5 h-3.5 transition-transform group-hover:translate-x-0.5" />

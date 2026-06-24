@@ -74,6 +74,7 @@ interface SidebarContentProps {
 
 function SidebarContent({ onClose, osCount, stockAlert, criticalItems }: SidebarContentProps) {
   const user = useAuthStore((s) => s.user);
+  const [totalOS, setTotalOS] = useState<number | null>(null);
   const logout = useAuthStore((s) => s.logout);
   const currentScreen = useAppStore((s) => s.currentScreen);
   const navigate = useAppStore((s) => s.navigate);
@@ -181,7 +182,7 @@ function SidebarContent({ onClose, osCount, stockAlert, criticalItems }: Sidebar
                   >
                     {/* Active indicator bar */}
                     {isActive && (
-                      <div className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-5 bg-emerald-400 rounded-r-full" />
+                      <div className="absolute left-0 top-1/2 -translate-y-1/2 w-0.75 h-5 bg-emerald-400 rounded-r-full" />
                     )}
                     <span className={isActive ? 'text-emerald-400' : 'text-zinc-500'}>{item.icon}</span>
                     <span className="flex-1 text-left truncate">{item.label}</span>
@@ -228,10 +229,10 @@ function SidebarContent({ onClose, osCount, stockAlert, criticalItems }: Sidebar
             {notifOpen && (
               <div className="absolute left-full top-0 ml-2 w-80 bg-zinc-900 border border-zinc-800 rounded-xl shadow-2xl shadow-black/50 z-50 animate-in fade-in slide-in-from-left-2 duration-200 overflow-hidden">
                 {/* Arrow */}
-                <div className="absolute -left-[6px] top-4 w-3 h-3 bg-zinc-900 border-t border-l border-zinc-800 -rotate-45" />
+                <div className="absolute -left-1.5 top-4 w-3 h-3 bg-zinc-900 border-t border-l border-zinc-800 -rotate-45" />
 
                 {/* Gradient accent bar */}
-                <div className="h-[2px] bg-linear-to-r from-emerald-400 via-emerald-400/40 to-transparent" />
+                <div className="h-0.5 bg-linear-to-r from-emerald-400 via-emerald-400/40 to-transparent" />
 
                 {/* Header */}
                 <div className="flex items-center justify-between px-4 py-3 border-b border-zinc-800/50">
@@ -366,9 +367,13 @@ export default function Sidebar() {
 
   useEffect(() => {
     if (!user?.empresa_id) return;
-    apiGet<{ total_abertas: number; estoque_critico_count: number; itens_criticos?: Array<{ id: string; nome: string; quantidade: number; minimo_alerta: number }> }>(`/dashboards/${user.empresa_id}`)
+    apiGet<{
+      total: number;
+      estoque_critico_count: number;
+      itens_criticos?: Array<{ id: string; nome: string; quantidade: number; minimo_alerta: number }>;
+    }>(`/os/?empresa_id=${user.empresa_id}&limit=1`)
       .then((d) => {
-        setOsCount(d.total_abertas);
+        setOsCount(d.total);
         setStockAlert(d.estoque_critico_count);
         setCriticalItems(d.itens_criticos || []);
       })
@@ -434,9 +439,9 @@ export default function Sidebar() {
           {notifOpen && (
             <div className="absolute right-0 top-full mt-2 w-80 bg-zinc-900 border border-zinc-800 rounded-xl shadow-2xl shadow-black/50 z-50 animate-in fade-in slide-in-from-top-2 duration-200 overflow-hidden">
               {/* Gradient accent bar */}
-              <div className="h-[2px] bg-linear-to-r from-emerald-400 via-emerald-400/40 to-transparent" />
+              <div className="h-0.5 bg-linear-to-r from-emerald-400 via-emerald-400/40 to-transparent" />
               {/* Arrow */}
-              <div className="absolute -top-[6px] right-3 w-3 h-3 bg-zinc-900 border-t border-l border-zinc-800 rotate-45" />
+              <div className="absolute -top-1.5 right-3 w-3 h-3 bg-zinc-900 border-t border-l border-zinc-800 rotate-45" />
 
               {/* Header */}
               <div className="flex items-center justify-between px-4 py-3 border-b border-zinc-800/50">

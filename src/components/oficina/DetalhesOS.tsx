@@ -236,6 +236,29 @@ export default function DetalhesOS() {
     changedBy: string;
   }>>([]);
 
+    // ── Computed ─────────────────────────────────────────────────────────────
+
+  const items = osData?.itens || [];
+  const totalCusto = items.reduce((sum, i) => sum + (i.preco_custo * i.quantidade), 0);
+  const totalVenda = items.reduce((sum, i) => sum + i.subtotal, 0);
+  const marginValue = totalVenda - totalCusto;
+  const marginPercent = totalVenda > 0 ? ((marginValue / totalVenda) * 100) : 0;
+  const negativeMargin = itemVenda && itemCusto && Number(itemVenda) < Number(itemCusto);
+
+  // Show toast once when negative margin is detected while adding item
+  const prevNegativeMargin = useRef(false);
+  useEffect(() => {
+    if (negativeMargin && !prevNegativeMargin.current && showAddItem) {
+      toast.warning('Margem negativa detectada!', { description: 'O preço de venda está abaixo do custo.' });
+    }
+    prevNegativeMargin.current = !!negativeMargin;
+  }, [negativeMargin, showAddItem]);
+
+  const filteredEstoque = itemEstoqueSearch
+    ? estoque.filter((e) => e.nome.toLowerCase().includes(itemEstoqueSearch.toLowerCase()))
+    : estoque;
+
+
   // ── Empresa data for receipt ─────────────────────────────────────────────
 
   const [empresaData, setEmpresaData] = useState<EmpresaDetails | null>(null);
@@ -271,27 +294,6 @@ export default function DetalhesOS() {
     openPrintWindow(receiptData);
   }, [osData, mecanicos, editMecanico, editPagamento, totalVenda, empresaData]);
 
-  // ── Computed ─────────────────────────────────────────────────────────────
-
-  const items = osData?.itens || [];
-  const totalCusto = items.reduce((sum, i) => sum + (i.preco_custo * i.quantidade), 0);
-  const totalVenda = items.reduce((sum, i) => sum + i.subtotal, 0);
-  const marginValue = totalVenda - totalCusto;
-  const marginPercent = totalVenda > 0 ? ((marginValue / totalVenda) * 100) : 0;
-  const negativeMargin = itemVenda && itemCusto && Number(itemVenda) < Number(itemCusto);
-
-  // Show toast once when negative margin is detected while adding item
-  const prevNegativeMargin = useRef(false);
-  useEffect(() => {
-    if (negativeMargin && !prevNegativeMargin.current && showAddItem) {
-      toast.warning('Margem negativa detectada!', { description: 'O preço de venda está abaixo do custo.' });
-    }
-    prevNegativeMargin.current = !!negativeMargin;
-  }, [negativeMargin, showAddItem]);
-
-  const filteredEstoque = itemEstoqueSearch
-    ? estoque.filter((e) => e.nome.toLowerCase().includes(itemEstoqueSearch.toLowerCase()))
-    : estoque;
 
   // ── Fetch data ───────────────────────────────────────────────────────────
 
@@ -506,7 +508,7 @@ export default function DetalhesOS() {
         <div className="w-24 h-10 rounded-xl bg-zinc-800 animate-pulse" />
 
         {/* Header skeleton */}
-        <div className="relative bg-gradient-to-br from-zinc-900/80 to-zinc-900/40 border border-zinc-800/60 rounded-2xl p-5 md:p-6 animate-pulse">
+        <div className="relative bg-linear-to-brrom-zinc-900/80 to-zinc-900/40 border border-zinc-800/60 rounded-2xl p-5 md:p-6 animate-pulse">
           <div className="flex items-center gap-4">
             <div className="w-11 h-11 rounded-xl bg-zinc-800" />
             <div className="space-y-2 flex-1">
@@ -579,7 +581,7 @@ export default function DetalhesOS() {
         </div>
 
         {/* Totals skeleton */}
-        <div className="bg-gradient-to-br from-zinc-900/80 to-zinc-900/40 border border-zinc-800/60 rounded-2xl p-5 md:p-6 space-y-3 animate-pulse">
+        <div className="bg-linear-to-br from-zinc-900/80 to-zinc-900/40 border border-zinc-800/60 rounded-2xl p-5 md:p-6 space-y-3 animate-pulse">
           <div className="h-4 bg-zinc-800 rounded w-36" />
           <div className="flex justify-between"><div className="h-3 bg-zinc-800/60 rounded w-24" /><div className="h-4 bg-zinc-800 rounded w-28" /></div>
           <div className="flex justify-between"><div className="h-3 bg-zinc-800/60 rounded w-24" /><div className="h-4 bg-zinc-800 rounded w-28" /></div>
@@ -617,12 +619,12 @@ export default function DetalhesOS() {
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
       {/* Header */}
-      <div className="relative bg-gradient-to-br from-zinc-900/80 to-zinc-900/40 border border-zinc-800/60 rounded-2xl p-5 md:p-6">
+      <div className="relative bg-linear-to-br from-zinc-900/80 to-zinc-900/40 border border-zinc-800/60 rounded-2xl p-5 md:p-6">
         <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
           <div className="flex items-center gap-4 flex-1">
             <button
               onClick={() => navigate('ordens-servico')}
-              className="p-2.5 rounded-xl border border-transparent text-zinc-400 hover:text-white hover:bg-zinc-800 hover:border-zinc-700 transition-all flex-shrink-0"
+              className="p-2.5 rounded-xl border border-transparent text-zinc-400 hover:text-white hover:bg-zinc-800 hover:border-zinc-700 transition-all shrink-0"
             >
               <ArrowLeft className="w-5 h-5" />
             </button>
@@ -654,7 +656,7 @@ export default function DetalhesOS() {
               </div>
             </div>
           </div>
-          <div className="flex items-center gap-2 flex-shrink-0">
+          <div className="flex items-center gap-2 shrink-0">
             <PrintReceiptButton onPrint={handlePrint} />
             <button
               onClick={handleSave}
@@ -674,7 +676,7 @@ export default function DetalhesOS() {
 
       {error && (
         <div className="p-3.5 rounded-xl bg-red-500/10 border border-red-500/20 text-red-400 text-sm flex items-center gap-2">
-          <AlertTriangle className="w-4 h-4 flex-shrink-0" />
+          <AlertTriangle className="w-4 h-4 shrink-0" />
           {error}
           <button onClick={() => setError('')} className="ml-auto hover:text-red-300 transition-colors">
             <X className="w-4 h-4" />
@@ -684,7 +686,7 @@ export default function DetalhesOS() {
 
       {saveSuccess && (
         <div className="p-3.5 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-sm flex items-center gap-2">
-          <Check className="w-4 h-4 flex-shrink-0" />
+          <Check className="w-4 h-4 shrink-0" />
           Informações salvas com sucesso!
         </div>
       )}
@@ -705,7 +707,7 @@ export default function DetalhesOS() {
               {/* Client */}
               {osData.clientes?.nome && (
                 <div className="flex items-start gap-3">
-                  <div className="w-9 h-9 rounded-full bg-gradient-to-br from-emerald-500/20 to-emerald-600/5 border border-emerald-500/20 flex items-center justify-center text-emerald-400 text-xs font-bold flex-shrink-0">
+                  <div className="w-9 h-9 rounded-full bg-linear-to-br from-emerald-500/20 to-emerald-600/5 border border-emerald-500/20 flex items-center justify-center text-emerald-400 text-xs font-bold shrink-0">
                     {osData.clientes.nome[0]?.toUpperCase() || '?'}
                   </div>
                   <div className="min-w-0">
@@ -731,7 +733,7 @@ export default function DetalhesOS() {
               {/* Vehicle */}
               {osData.veiculos && (
                 <div className="flex items-start gap-3">
-                  <div className="w-10 h-10 rounded-lg bg-zinc-800/80 flex items-center justify-center flex-shrink-0">
+                  <div className="w-10 h-10 rounded-lg bg-zinc-800/80 flex items-center justify-center shrink-0">
                     <CarFront className="w-5 h-5 text-zinc-400" />
                   </div>
                   <div className="min-w-0">
@@ -828,7 +830,7 @@ export default function DetalhesOS() {
                 </div>
                 {selectedMecanico && (
                   <div className="flex items-center gap-2 mt-2">
-                    <div className="w-5 h-5 rounded-full bg-gradient-to-br from-emerald-500/20 to-emerald-600/5 border border-emerald-500/20 flex items-center justify-center text-emerald-400 text-[9px] font-bold">
+                    <div className="w-5 h-5 rounded-full bg-linear-to-br from-emerald-500/20 to-emerald-600/5 border border-emerald-500/20 flex items-center justify-center text-emerald-400 text-[9px] font-bold">
                       {selectedMecanico.nome[0]?.toUpperCase()}
                     </div>
                     <span className="text-zinc-400 text-xs">{selectedMecanico.nome} · {selectedMecanico.cargo}</span>
@@ -919,7 +921,7 @@ export default function DetalhesOS() {
 
           {/* Status History (Audit Trail) */}
           {(statusHistory.length > 0 || osData.status !== 'ORCAMENTO') && (
-            <div className="bg-gradient-to-br from-zinc-900/80 to-zinc-900/40 border border-zinc-800/60 rounded-2xl overflow-hidden animate-slide-in-right">
+            <div className="bg-linear-to-br from-zinc-900/80 to-zinc-900/40 border border-zinc-800/60 rounded-2xl overflow-hidden animate-slide-in-right">
               <div className="flex items-center gap-3 px-5 py-3.5 bg-zinc-900/30 border-b border-zinc-800/50">
                 <div className="w-8 h-8 rounded-lg bg-emerald-500/10 flex items-center justify-center">
                   <Clock className="w-4 h-4 text-emerald-400" />
@@ -935,7 +937,7 @@ export default function DetalhesOS() {
                 ) : (
                   <div className="relative pl-5">
                     {/* Vertical line */}
-                    <div className="absolute left-[7px] top-2 bottom-2 w-px bg-zinc-800/80" />
+                    <div className="absolute left-1.75 top-2 bottom-2 w-px bg-zinc-800/80" />
                     <div className="space-y-4">
                       {statusHistory.map((entry, idx) => {
                         const esc = getStatusConfig(entry.status);
@@ -974,7 +976,7 @@ export default function DetalhesOS() {
           )}
 
           {/* Totals Section */}
-          <div className="bg-gradient-to-br from-zinc-900/80 to-zinc-900/40 border border-emerald-500/20 rounded-2xl p-5 md:p-6 space-y-3">
+          <div className="bg-linear-to-br from-zinc-900/80 to-zinc-900/40 border border-emerald-500/20 rounded-2xl p-5 md:p-6 space-y-3">
             <h2 className="text-sm font-bold text-zinc-400 uppercase tracking-wider flex items-center gap-2 mb-4">
               <DollarSign className="w-4 h-4 text-emerald-400" />
               Resumo Financeiro
@@ -1003,7 +1005,7 @@ export default function DetalhesOS() {
             {/* Hero total */}
             <div className="mt-4 pt-4 border-t border-zinc-800/50 text-center">
               <span className="text-xs font-semibold uppercase tracking-wider text-zinc-500 block mb-1">Total da OS</span>
-              <span className="text-3xl md:text-4xl font-black text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 to-emerald-300 tabular-nums">
+              <span className="text-3xl md:text-4xl font-black text-transparent bg-clip-text bg-linear-to-r from-emerald-400 to-emerald-300 tabular-nums">
                 {formatCurrency(totalVenda)}
               </span>
               {osData.forma_pagamento && (
@@ -1081,7 +1083,7 @@ export default function DetalhesOS() {
                               {tipoLabels[item.tipo] || item.tipo}
                             </span>
                           </td>
-                          <td className="px-4 py-3 text-white font-medium truncate max-w-[200px]">
+                          <td className="px-4 py-3 text-white font-medium truncate max-w-50">
                             {item.nome}
                           </td>
                           <td className="px-4 py-3 text-center tabular-nums hidden sm:table-cell">
@@ -1118,8 +1120,8 @@ export default function DetalhesOS() {
             )}
             {/* Negative margin summary warning */}
             {items.some((item) => item.preco_venda < item.preco_custo) && (
-              <div className="mx-5 mb-5 p-3.5 rounded-xl bg-gradient-to-r from-red-500/10 to-red-500/5 border border-red-500/20 flex items-center gap-2.5">
-                <div className="w-8 h-8 rounded-lg bg-red-500/10 flex items-center justify-center flex-shrink-0">
+              <div className="mx-5 mb-5 p-3.5 rounded-xl bg-linear-to-r from-red-500/10 to-red-500/5 border border-red-500/20 flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-lg bg-red-500/10 flex items-center justify-center shrink-0">
                   <AlertTriangle className="w-4 h-4 text-red-400" />
                 </div>
                 <div>
@@ -1160,7 +1162,7 @@ export default function DetalhesOS() {
             <div className="p-5 space-y-4">
               {itemError && (
                 <div className="p-3.5 rounded-xl bg-red-500/10 border border-red-500/20 text-red-400 text-sm flex items-center gap-2">
-                  <AlertTriangle className="w-4 h-4 flex-shrink-0" />
+                  <AlertTriangle className="w-4 h-4 shrink-0" />
                   {itemError}
                 </div>
               )}
@@ -1307,7 +1309,7 @@ export default function DetalhesOS() {
               {/* Negative margin warning */}
               {negativeMargin && (
                 <div className="p-3.5 rounded-xl bg-red-500/10 border border-red-500/20 text-red-400 text-sm flex items-center gap-2 font-bold">
-                  <AlertTriangle className="w-4 h-4 flex-shrink-0" />
+                  <AlertTriangle className="w-4 h-4 shrink-0" />
                   MARGEM NEGATIVA! Preço de venda menor que o custo.
                 </div>
               )}

@@ -56,28 +56,28 @@ const STATUS_FILTERS = [
 ];
 
 const statusAccentLine: Record<string, string> = {
-  ORCAMENTO: 'via-yellow-500/30',
+  ORCAMENTO: 'via-zinc-400/30',
   EXECUCAO: 'via-blue-400/30',
   AGUARDANDO_PECA: 'via-orange-400/30',
   FINALIZADO: 'via-emerald-400/30',
-  PAGO: 'via-emerald-300/30',
+  PAGO: 'via-yellow-400/30',
 };
 
 const statusDotColor: Record<string, string> = {
-  ORCAMENTO: 'bg-yellow-500',
+  ORCAMENTO: 'bg-zinc-400',
   EXECUCAO: 'bg-blue-500',
   AGUARDANDO_PECA: 'bg-orange-500',
   FINALIZADO: 'bg-emerald-500',
-  PAGO: 'bg-emerald-400',
+  PAGO: 'bg-yellow-400',
 };
 
 const statusConfig: Record<string, { label: string; color: string; borderColor: string; bgColor: string; dotColor: string; pulse?: boolean }> = {
   ORCAMENTO: {
     label: 'Orçamento',
-    color: 'text-yellow-500',
-    borderColor: 'border-yellow-500/20',
-    bgColor: 'bg-yellow-500/10',
-    dotColor: 'bg-yellow-500',
+    color: 'text-zinc-400',
+    borderColor: 'border-zinc-500/20',
+    bgColor: 'bg-zinc-500/10',
+    dotColor: 'bg-zinc-400',
   },
   EXECUCAO: {
     label: 'Execução',
@@ -103,10 +103,10 @@ const statusConfig: Record<string, { label: string; color: string; borderColor: 
   },
   PAGO: {
     label: 'Pago',
-    color: 'text-emerald-400',
-    borderColor: 'border-emerald-500/30',
-    bgColor: 'bg-emerald-600/20',
-    dotColor: 'bg-emerald-400',
+    color: 'text-yellow-400',
+    borderColor: 'border-yellow-400/30',
+    bgColor: 'bg-yellow-500/10',
+    dotColor: 'bg-yellow-400',
   },
 };
 
@@ -234,6 +234,7 @@ export default function OrdensServico() {
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [viewMode, setViewMode] = useState<ViewMode>(defaultView);
   const searchTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [globalStatusCounts, setGlobalStatusCounts] = useState<Record<string, number>>({});
 
   // ── Fetch data ──────────────────────────────────────────────────────────
 
@@ -266,6 +267,36 @@ export default function OrdensServico() {
     }
   }, [user?.empresa_id]);
 
+  const fetchGlobalCounts = useCallback(async (search: string) => {
+    if (!user?.empresa_id) return;
+    try {
+      const statuses = ['Todos', 'ORCAMENTO', 'EXECUCAO', 'AGUARDANDO_PECA', 'FINALIZADO', 'PAGO'];
+      
+      const promises = statuses.map(async (st) => {
+        const params = new URLSearchParams({
+          empresa_id: user.empresa_id,
+          limit: '1', // Pede só 1 item pra não pesar, a gente só quer o 'total'
+        });
+        if (st !== 'Todos') params.set('status', st);
+        if (search.trim()) params.set('search', search.trim());
+
+        const raw = await apiGet<OSListResponse>(`/os/?${params.toString()}`);
+        return { status: st, count: raw.total ?? 0 };
+      });
+
+      const results = await Promise.all(promises);
+      const newCounts: Record<string, number> = {};
+      results.forEach((r) => {
+        newCounts[r.status] = r.count;
+      });
+
+      setGlobalStatusCounts(newCounts);
+    } catch {
+      // Falhou silenciosamente pra não encher o saco do usuário
+      console.error('Falha ao buscar contagens globais');
+    }
+  }, [user?.empresa_id]);
+
   // reset página ao mudar filtro ou busca
   useEffect(() => {
     setCurrentPage(0);
@@ -273,7 +304,8 @@ export default function OrdensServico() {
 
   useEffect(() => {
     fetchData(currentPage, activeFilter, debouncedSearch);
-  }, [fetchData, currentPage, activeFilter, debouncedSearch]);
+    fetchGlobalCounts(debouncedSearch);
+  }, [fetchData, fetchGlobalCounts, currentPage, activeFilter, debouncedSearch]);
 
   // ── Debounce search ─────────────────────────────────────────────────────
 
@@ -286,16 +318,6 @@ export default function OrdensServico() {
       if (searchTimeout.current) clearTimeout(searchTimeout.current);
     };
   }, [searchTerm]);
-
-  // ── Status counts — contagem local para pills (baseada na página atual) ─
-
-  const statusCounts = useMemo(() => {
-    const counts: Record<string, number> = { Todos: totalCount };
-    for (const os of ordens) {
-      counts[os.status] = (counts[os.status] || 0) + 1;
-    }
-    return counts;
-  }, [ordens, totalCount]);
 
   // ── Pagination derived ───────────────────────────────────────────────────
 
@@ -442,7 +464,7 @@ export default function OrdensServico() {
         <Filter className="w-4 h-4 text-zinc-500 shrink-0 mt-2" />
         {STATUS_FILTERS.map((f) => {
           const isActive = activeFilter === f.key;
-          const count = statusCounts[f.key] ?? 0;
+          const count = globalStatusCounts[f.key] ?? 0;
           const hasZero = count === 0;
           const isTodos = f.key === 'Todos';
 

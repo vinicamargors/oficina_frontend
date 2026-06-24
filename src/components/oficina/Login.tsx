@@ -84,7 +84,7 @@ export default function Login() {
         {/* Gradient orbs */}
         <div className="absolute -top-40 -right-40 w-96 h-96 bg-emerald-500/5 rounded-full blur-3xl animate-pulse" />
         <div className="absolute -bottom-40 -left-40 w-96 h-96 bg-emerald-600/5 rounded-full blur-3xl animate-pulse" style={{ animationDelay: '1s' }} />
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-emerald-500/3 rounded-full blur-3xl" />
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-150 h-150 bg-emerald-500/3 rounded-full blur-3xl" />
 
 
         {/* Floating particles */}
@@ -127,14 +127,14 @@ export default function Login() {
           }}
         />
         {/* Top edge glow */}
-        <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-emerald-500/20 to-transparent" />
+        <div className="absolute top-0 left-0 right-0 h-px bg-linear-to-r from-transparent via-emerald-500/20 to-transparent" />
       </div>
 
 
       <div className="w-full max-w-md relative z-10 animate-in fade-in zoom-in-95 duration-700">
         {/* ── Logo & Brand ── */}
         <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-20 h-20 rounded-2xl bg-gradient-to-br from-emerald-500/20 to-emerald-600/5 border border-emerald-500/20 mb-5 shadow-lg shadow-emerald-500/5">
+          <div className="inline-flex items-center justify-center w-20 h-20 rounded-2xl bg-linear-to-br from-emerald-500/20 to-emerald-600/5 border border-emerald-500/20 mb-5 shadow-lg shadow-emerald-500/5">
             <Wrench className="w-10 h-10 text-emerald-500 animate-bounce" style={{ animationDuration: '3s' }} strokeWidth={1.5} />
           </div>
           <h1 className="text-3xl font-black text-white tracking-tight">
@@ -147,15 +147,15 @@ export default function Login() {
 
 
         {/* ── Login Card with rotating gradient border ── */}
-        <div className="relative p-[1px] rounded-2xl login-border-glow">
+        <div className="relative p-px rounded-2xl login-border-glow">
           {/* Card top accent */}
-          <div className="absolute top-0 left-8 right-8 h-px bg-gradient-to-r from-transparent via-emerald-500/30 to-transparent z-10" />
+          <div className="absolute top-0 left-8 right-8 h-px bg-linear-to-r from-transparent via-emerald-500/30 to-transparent z-10" />
 
 
           {/* Inner card with noise texture */}
-          <div className="relative rounded-[15px] bg-gradient-to-b from-zinc-900/95 to-zinc-900/90 backdrop-blur-xl p-7 shadow-2xl shadow-black/30 noise-overlay overflow-hidden">
+          <div className="relative rounded-[15px] bg-linear-to-b from-zinc-900/95 to-zinc-900/90 backdrop-blur-xl p-7 shadow-2xl shadow-black/30 noise-overlay overflow-hidden">
             {/* Inner shadow glow at bottom */}
-            <div className="absolute bottom-0 left-0 right-0 h-24 bg-gradient-to-t from-emerald-500/5 to-transparent pointer-events-none z-0" />
+            <div className="absolute bottom-0 left-0 right-0 h-24 bg-linear-to-t from-emerald-500/5 to-transparent pointer-events-none z-0" />
 
 
             {/* Card content (above noise overlay) */}
@@ -174,7 +174,7 @@ export default function Login() {
               {/* ── Error Alert ── */}
               {error && (
                 <div className="mb-5 p-3.5 rounded-xl bg-red-500/10 border border-red-500/20 text-red-400 text-sm flex items-start gap-2.5 animate-in fade-in slide-in-from-top-2 duration-300">
-                  <svg className="w-4 h-4 mt-0.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <svg className="w-4 h-4 mt-0.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01M12 2l10 18H2L12 2z" />
                   </svg>
                   <span className="leading-snug">{error}</span>
@@ -242,7 +242,7 @@ export default function Login() {
                 <button
                   type="submit"
                   disabled={loading}
-                  className="w-full cursor-pointer bg-gradient-to-r from-emerald-600 to-emerald-500 hover:from-emerald-500 hover:to-emerald-400 text-white font-bold rounded-xl shadow-lg shadow-emerald-600/20 p-3.5 text-sm transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2.5 active:scale-[0.98] group btn-shimmer"
+                  className="w-full cursor-pointer bg-linear-to-r from-emerald-600 to-emerald-500 hover:from-emerald-500 hover:to-emerald-400 text-white font-bold rounded-xl shadow-lg shadow-emerald-600/20 p-3.5 text-sm transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2.5 active:scale-[0.98] group btn-shimmer"
                 >
                   {loading ? (
                     <>
@@ -282,7 +282,7 @@ export default function Login() {
         {/* ── Feature Highlights ── */}
         <div className="mt-6 hidden sm:grid sm:grid-cols-3 gap-3 stagger-children">
           <div className="group flex items-start gap-3 p-3 rounded-xl bg-zinc-900/30 border border-zinc-800/40 hover:border-emerald-500/20 hover:-translate-y-0.5 hover:shadow-lg hover:shadow-emerald-500/5 transition-all duration-300">
-            <div className="p-2 rounded-lg bg-emerald-500/10 border border-emerald-500/20 flex-shrink-0">
+            <div className="p-2 rounded-lg bg-emerald-500/10 border border-emerald-500/20 shrink-0">
               <ClipboardList className="w-4 h-4 text-emerald-400" />
             </div>
             <div className="min-w-0">
@@ -292,7 +292,7 @@ export default function Login() {
             </div>
           </div>
           <div className="group flex items-start gap-3 p-3 rounded-xl bg-zinc-900/30 border border-zinc-800/40 hover:border-emerald-500/20 hover:-translate-y-0.5 hover:shadow-lg hover:shadow-emerald-500/5 transition-all duration-300">
-            <div className="p-2 rounded-lg bg-emerald-500/10 border border-emerald-500/20 flex-shrink-0">
+            <div className="p-2 rounded-lg bg-emerald-500/10 border border-emerald-500/20 shrink-0">
               <Bell className="w-4 h-4 text-emerald-400" />
             </div>
             <div className="min-w-0">
@@ -302,7 +302,7 @@ export default function Login() {
             </div>
           </div>
           <div className="group flex items-start gap-3 p-3 rounded-xl bg-zinc-900/30 border border-zinc-800/40 hover:border-emerald-500/20 hover:-translate-y-0.5 hover:shadow-lg hover:shadow-emerald-500/5 transition-all duration-300">
-            <div className="p-2 rounded-lg bg-emerald-500/10 border border-emerald-500/20 flex-shrink-0">
+            <div className="p-2 rounded-lg bg-emerald-500/10 border border-emerald-500/20 shrink-0">
               <Smartphone className="w-4 h-4 text-emerald-400" />
             </div>
             <div className="min-w-0">
@@ -317,7 +317,7 @@ export default function Login() {
         {/* ── Footer ── */}
         <div className="mt-8 text-center space-y-3">
           {/* Gradient line above footer */}
-          <div className="h-px bg-gradient-to-r from-transparent via-zinc-700/50 to-transparent" />
+          <div className="h-px bg-linear-to-r from-transparent via-zinc-700/50 to-transparent" />
           <p className="text-zinc-600 text-xs">
             AutoTec PRO © {new Date().getFullYear()} — Todos os direitos reservados
           </p>

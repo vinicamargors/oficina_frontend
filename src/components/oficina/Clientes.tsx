@@ -95,7 +95,7 @@ function ClientCardSkeleton() {
   return (
     <div className="bg-zinc-900/50 border border-zinc-800 rounded-xl p-4 md:p-6 animate-pulse border-l-2 border-l-zinc-800">
       <div className="flex items-start gap-3">
-        <div className="w-11 h-11 rounded-full bg-zinc-800 flex-shrink-0" />
+        <div className="w-11 h-11 rounded-full bg-zinc-800 shrink-0" />
         <div className="flex-1 space-y-2.5">
           <div className="w-36 h-4 rounded bg-zinc-800" />
           <div className="flex items-center gap-3">
@@ -107,7 +107,7 @@ function ClientCardSkeleton() {
             <div className="w-14 h-5 rounded-md bg-zinc-800/50" />
           </div>
         </div>
-        <div className="flex items-center gap-1.5 flex-shrink-0">
+        <div className="flex items-center gap-1.5 shrink-0">
           <div className="w-9 h-9 rounded-xl bg-zinc-800/50" />
           <div className="w-9 h-9 rounded-xl bg-zinc-800/50" />
           <div className="w-9 h-9 rounded-xl bg-zinc-800/50" />
@@ -442,7 +442,7 @@ export default function Clientes() {
     return (
       <div className="space-y-6 animate-in fade-in duration-500">
         {/* Header skeleton */}
-        <div className="relative bg-gradient-to-br from-zinc-900/80 to-zinc-900/40 border border-zinc-800/60 rounded-2xl p-5 md:p-6">
+        <div className="relative bg-linear-to-br from-zinc-900/80 to-zinc-900/40 border border-zinc-800/60 rounded-2xl p-5 md:p-6">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
             <div className="space-y-2">
               <div className="w-52 h-7 rounded-lg bg-zinc-800 animate-pulse" />
@@ -462,7 +462,7 @@ export default function Clientes() {
           ))}
         </div>
         {/* Search skeleton */}
-        <div className="bg-gradient-to-br from-zinc-900/80 to-zinc-900/40 border border-zinc-800/60 rounded-2xl p-1.5">
+        <div className="bg-linear-to-br from-zinc-900/80 to-zinc-900/40 border border-zinc-800/60 rounded-2xl p-1.5">
           <div className="w-full h-11 rounded-xl bg-zinc-800/50 border border-zinc-800 animate-pulse" />
         </div>
         {/* Client card skeletons */}
@@ -478,10 +478,10 @@ export default function Clientes() {
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
       {/* Header with gradient card */}
-      <div className="relative bg-gradient-to-br from-zinc-900/80 to-zinc-900/40 border border-zinc-800/60 rounded-2xl p-5 md:p-6">
+      <div className="relative bg-linear-to-br from-zinc-900/80 to-zinc-900/40 border border-zinc-800/60 rounded-2xl p-5 md:p-6">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center flex-shrink-0">
+            <div className="w-10 h-10 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center shrink-0">
               <Users className="w-5 h-5 text-emerald-400" />
             </div>
             <div>
@@ -539,13 +539,13 @@ export default function Clientes() {
 
       {error && (
         <div className="p-3 rounded-xl bg-red-500/10 border border-red-500/20 text-red-400 text-sm flex items-center gap-2">
-          <AlertTriangle className="w-4 h-4 flex-shrink-0" />
+          <AlertTriangle className="w-4 h-4 shrink-0" />
           {error}
         </div>
       )}
 
       {/* Search */}
-      <div className="bg-gradient-to-br from-zinc-900/80 to-zinc-900/40 border border-zinc-800/60 rounded-2xl p-1.5">
+      <div className="bg-linear-to-br from-zinc-900/80 to-zinc-900/40 border border-zinc-800/60 rounded-2xl p-1.5">
         <div className="relative">
           <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-emerald-500/40" />
           <input
@@ -624,7 +624,7 @@ export default function Clientes() {
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-3">
                         {/* Avatar initials with gradient */}
-                        <div className="w-10 h-10 rounded-full bg-gradient-to-br from-emerald-500/30 via-emerald-600/15 to-teal-500/10 border border-emerald-500/20 flex items-center justify-center flex-shrink-0 shadow-sm shadow-emerald-500/5">
+                        <div className="w-10 h-10 rounded-full bg-linear-to-br from-emerald-500/30 via-emerald-600/15 to-teal-500/10 border border-emerald-500/20 flex items-center justify-center shrink-0 shadow-sm shadow-emerald-500/5">
                           <span className="text-emerald-300 font-bold text-sm">
                             {getInitials(cliente.nome)}
                           </span>
@@ -635,13 +635,13 @@ export default function Clientes() {
                               {cliente.nome}
                             </h3>
                             {vCount > 0 && (
-                              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 text-[9px] font-bold rounded-md bg-blue-500/10 text-blue-400 border border-blue-500/20 flex-shrink-0">
+                              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 text-[9px] font-bold rounded-md bg-blue-500/10 text-blue-400 border border-blue-500/20 shrink-0">
                                 <Car className="w-2.5 h-2.5" />
                                 {vCount}
                               </span>
                             )}
                             {hasVeh !== undefined && !hasVeh && (
-                              <span className="inline-flex items-center px-1.5 py-0.5 text-[9px] font-bold rounded-md uppercase tracking-wider flex-shrink-0 bg-zinc-800/50 text-zinc-500 border border-zinc-700/50">
+                              <span className="inline-flex items-center px-1.5 py-0.5 text-[9px] font-bold rounded-md uppercase tracking-wider shrink-0 bg-zinc-800/50 text-zinc-500 border border-zinc-700/50">
                                 Sem veículo
                               </span>
                             )}
@@ -663,14 +663,14 @@ export default function Clientes() {
                         </div>
                       </div>
                       {cliente.endereco && (
-                        <div className="flex items-center gap-1.5 mt-2 ml-[52px]">
+                        <div className="flex items-center gap-1.5 mt-2 ml-13">
                           <MapPin className="w-3 h-3 text-zinc-600" />
                           <span className="text-zinc-500 text-xs truncate">{cliente.endereco}</span>
                         </div>
                       )}
                     </div>
 
-                    <div className="flex items-center gap-1.5 flex-shrink-0">
+                    <div className="flex items-center gap-1.5 shrink-0">
                       {/* WhatsApp button */}
                       {cliente.telefone && (
                         <a
@@ -852,8 +852,8 @@ export default function Clientes() {
                               key={v.id}
                               className="bg-zinc-800/30 border border-zinc-700/30 rounded-xl p-3.5 flex items-center gap-3 hover:bg-zinc-800/50 transition-colors"
                             >
-                              <Car className="w-4 h-4 text-zinc-500 flex-shrink-0" />
-                              <span className="inline-flex items-center px-2 py-0.5 rounded bg-white/5 border border-zinc-700/50 text-zinc-300 text-[10px] font-mono font-bold uppercase tracking-wider flex-shrink-0">
+                              <Car className="w-4 h-4 text-zinc-500 shrink-0" />
+                              <span className="inline-flex items-center px-2 py-0.5 rounded bg-white/5 border border-zinc-700/50 text-zinc-300 text-[10px] font-mono font-bold uppercase tracking-wider shrink-0">
                                 {v.placa.toUpperCase()}
                               </span>
                               <div className="min-w-0 flex-1">
@@ -901,7 +901,7 @@ export default function Clientes() {
             {/* Glass background layer */}
             <div className="absolute inset-0 glass rounded-2xl" />
             {/* Gradient accent line at top */}
-            <div className="relative h-1 bg-gradient-to-r from-emerald-500 via-emerald-400 to-teal-400" />
+            <div className="relative h-1 bg-linear-to-r from-emerald-500 via-emerald-400 to-teal-400" />
             {/* Content */}
             <div className="relative bg-zinc-900/95 rounded-b-2xl border border-zinc-800 border-t-0">
               {/* Header */}
@@ -927,7 +927,7 @@ export default function Clientes() {
               <div className="px-5 pb-5 space-y-3">
                 {qcError && (
                   <div className="p-3 rounded-xl bg-red-500/10 border border-red-500/20 text-red-400 text-sm flex items-center gap-2">
-                    <AlertTriangle className="w-4 h-4 flex-shrink-0" />
+                    <AlertTriangle className="w-4 h-4 shrink-0" />
                     {qcError}
                   </div>
                 )}
@@ -999,7 +999,7 @@ export default function Clientes() {
                   <button
                     onClick={handleQuickCreate}
                     disabled={qcSaving}
-                    className="inline-flex items-center gap-2 bg-gradient-to-r from-emerald-600 to-emerald-500 hover:from-emerald-500 hover:to-emerald-400 text-white font-bold rounded-xl px-5 py-2.5 text-sm transition-all disabled:opacity-50 active:scale-[0.98] shadow-lg shadow-emerald-600/20"
+                    className="inline-flex items-center gap-2 bg-linear-to-r from-emerald-600 to-emerald-500 hover:from-emerald-500 hover:to-emerald-400 text-white font-bold rounded-xl px-5 py-2.5 text-sm transition-all disabled:opacity-50 active:scale-[0.98] shadow-lg shadow-emerald-600/20"
                   >
                     {qcSaving ? (
                       <Loader2 className="w-4 h-4 animate-spin" />
@@ -1027,7 +1027,7 @@ export default function Clientes() {
           {/* Modal Content */}
           <div className="relative bg-zinc-900 border border-zinc-800 rounded-xl w-full max-w-md shadow-2xl animate-in fade-in zoom-in-95 duration-200">
             {/* Gradient accent line at top */}
-            <div className="h-1 bg-gradient-to-r from-emerald-500 via-emerald-400 to-teal-400 rounded-t-xl" />
+            <div className="h-1 bg-linear-to-r from-emerald-500 via-emerald-400 to-teal-400 rounded-t-xl" />
 
             {/* Modal Header Strip */}
             <div className="px-5 py-4 bg-zinc-900/30 border-b border-zinc-800/50">
@@ -1057,14 +1057,14 @@ export default function Clientes() {
             <div className="p-5 space-y-4">
               {formError && (
                 <div className="p-3 rounded-xl bg-red-500/10 border border-red-500/20 text-red-400 text-sm flex items-center gap-2">
-                  <AlertTriangle className="w-4 h-4 flex-shrink-0" />
+                  <AlertTriangle className="w-4 h-4 shrink-0" />
                   {formError}
                 </div>
               )}
 
               {duplicateWarning && (
                 <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-400 text-sm flex items-center gap-2">
-                  <AlertTriangle className="w-4 h-4 flex-shrink-0" />
+                  <AlertTriangle className="w-4 h-4 shrink-0" />
                   {duplicateWarning}
                 </div>
               )}
@@ -1176,7 +1176,7 @@ export default function Clientes() {
               <button
                 onClick={handleSave}
                 disabled={saving}
-                className="inline-flex items-center gap-2 bg-gradient-to-r from-emerald-600 to-emerald-500 hover:from-emerald-500 hover:to-emerald-400 text-white font-bold rounded-xl px-5 py-3 text-sm transition-all disabled:opacity-50 active:scale-[0.98]"
+                className="inline-flex items-center gap-2 bg-linear-to-r from-emerald-600 to-emerald-500 hover:from-emerald-500 hover:to-emerald-400 text-white font-bold rounded-xl px-5 py-3 text-sm transition-all disabled:opacity-50 active:scale-[0.98]"
               >
                 {saving ? (
                   <Loader2 className="w-4 h-4 animate-spin" />

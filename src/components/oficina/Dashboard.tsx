@@ -270,10 +270,12 @@ export default function Dashboard() {
     return () => clearTimeout(timer);
   }, []);
 
-  const fetchVeiculosRevisao = useCallback(async () => {
+const fetchVeiculosRevisao = useCallback(async () => {
     if (!user?.empresa_id) return;
     try {
-      const res = await apiGet<Array<{id: string; placa: string; modelo: string; km_atual?: number}>>(`/veiculos?empresa_id=${user.empresa_id}`);
+      // Ajustado: tiramos a query string e colocamos o ID direto no caminho da rota
+      const res = await apiGet<Array<{id: string; placa: string; modelo: string; km_atual?: number}>>(`/veiculos/${user.empresa_id}`);
+      
       const filtered = (res || []).filter((v) => v.km_atual != null && v.km_atual > 0).slice(0, 4);
       setVeiculosRevisao(filtered);
     } catch {

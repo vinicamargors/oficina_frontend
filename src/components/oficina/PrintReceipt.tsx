@@ -1,377 +1,260 @@
-'use client';
-
-// ─── Types ───────────────────────────────────────────────────────────────────
-
-export interface ReceiptOSItem {
+export interface PrintReceiptItem {
   descricao: string;
   quantidade: number;
   valor_unitario: number;
   valor_total: number;
-}
-
-export interface ReceiptCliente {
-  nome: string;
-  telefone: string;
-  cpf_cnpj?: string;
-  endereco?: string;
-}
-
-export interface ReceiptVeiculo {
-  placa: string;
-  modelo: string;
-  marca: string;
-  cor: string;
-  km_atual: number;
-  ano: number;
-}
-
-export interface ReceiptEmpresa {
-  nome_fantasia?: string;
-  razao_social?: string;
-  cnpj?: string;
-  endereco?: string;
-  telefone?: string;
-  logo_b64?: string;
+  tipo?: string;
 }
 
 export interface PrintReceiptData {
   id: string;
-  data_abertura: string;
-  status: string;
+  data_abertura?: string;
+  status?: string;
   descricao?: string;
   forma_pagamento?: string;
   mecanico_nome?: string;
   desconto?: number;
-  total_geral: number;
-  clientes?: ReceiptCliente | null;
-  veiculos?: ReceiptVeiculo | null;
-  itens?: ReceiptOSItem[] | null;
-  empresa?: ReceiptEmpresa | null;
+  total_geral?: number;
+  clientes?: { nome?: string; telefone?: string; cpf_cnpj?: string; endereco?: string } | null;
+  veiculos?: { placa?: string; modelo?: string; marca?: string; cor?: string; km_atual?: number; ano?: number } | null;
+  itens: PrintReceiptItem[];
+  empresa?: { nome_fantasia?: string; razao_social?: string; cnpj?: string; endereco?: string; telefone?: string; email?: string; logo_b64?: string } | null;
 }
 
-// ─── Helpers ─────────────────────────────────────────────────────────────────
+const formatCurrency = (value?: number) => {
+  return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value || 0);
+};
 
-function formatBRL(value: number): string {
-  return new Intl.NumberFormat('pt-BR', {
-    style: 'currency',
-    currency: 'BRL',
-  }).format(value);
-}
-
-function formatDateBR(dateStr: string): string {
+const formatDate = (dateStr?: string) => {
+  if (!dateStr) return 'Não informada';
   try {
     const date = new Date(dateStr);
-    return new Intl.DateTimeFormat('pt-BR', {
-      day: '2-digit',
-      month: '2-digit',
-      year: 'numeric',
-    }).format(date);
+    return new Intl.DateTimeFormat('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }).format(date);
   } catch {
     return dateStr;
   }
-}
-
-const statusLabelMap: Record<string, string> = {
-  ORCAMENTO: 'Orçamento',
-  EXECUCAO: 'Em Execução',
-  AGUARDANDO_PECA: 'Aguardando Peça',
-  FINALIZADO: 'Finalizado',
-  PAGO: 'Pago',
 };
 
-const pagamentoLabelMap: Record<string, string> = {
-  DINHEIRO: 'Dinheiro',
-  PIX: 'PIX',
-  CARTAO_CREDITO: 'Cartão de Crédito',
-  CARTAO_DEBITO: 'Cartão de Débito',
-  BOLETO: 'Boleto',
-  TRANSFERENCIA: 'Transferência',
-};
+export const openPrintWindow = (data: PrintReceiptData) => {
+  try {
+    const safeId = data.id ? String(data.id).substring(0, 8).toUpperCase() : 'NOVO';
+    const itens = data.itens || [];
 
-function maskCnpjCpf(value?: string): string {
-  if (!value) return '—';
-  const digits = value.replace(/\D/g, '');
-  if (digits.length === 11) {
-    return digits.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4');
-  }
-  if (digits.length === 14) {
-    return digits.replace(/(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})/, '$1.$2.$3/$4-$5');
-  }
-  return value;
-}
+    // Separa os itens por categoria
+    const pecas = itens.filter((i) => i.tipo === 'PECA');
+    const maoObra = itens.filter((i) => i.tipo === 'MAO_DE_OBRA' || i.tipo === 'MAO_OBRA' || i.tipo === 'SERVICO');
+    const terceirizados = itens.filter((i) => i.tipo === 'TERCEIRIZADO');
 
-// ─── HTML Generator ──────────────────────────────────────────────────────────
-
-function buildReceiptHTML(data: PrintReceiptData): string {
-  const empresa = data.empresa;
-  const cliente = data.clientes;
-  const veiculo = data.veiculos;
-  const itens = data.itens || [];
-  const subtotal = itens.reduce((s, i) => s + i.valor_total, 0);
-  const desconto = data.desconto || 0;
-  const total = data.total_geral || subtotal - desconto;
-  const shortId = data.id.length > 8 ? data.id.substring(0, 8).toUpperCase() : data.id.toUpperCase();
-  const statusLabel = statusLabelMap[data.status] || data.status;
-  const pagamentoLabel = pagamentoLabelMap[data.forma_pagamento || ''] || data.forma_pagamento || '—';
-
-  const logoHtml = empresa?.logo_b64
-    ? `<img src="${empresa.logo_b64}" alt="Logo" style="max-width:120px;max-height:60px;margin:0 auto 8px;display:block;" />`
-    : '';
-
-  const companyLine = empresa?.nome_fantasia || 'AutoTec PRO';
-  const cnpjLine = empresa?.cnpj ? `CNPJ: ${maskCnpjCpf(empresa.cnpj)}` : '';
-  const enderecoLine = empresa?.endereco || '';
-
-  const clienteNome = cliente?.nome || '—';
-  const clienteTel = cliente?.telefone || '—';
-  const clienteCpf = cliente?.cpf_cnpj ? maskCnpjCpf(cliente.cpf_cnpj) : '';
-
-  const placa = veiculo?.placa || '—';
-  const modeloVeiculo = veiculo
-    ? [veiculo.marca, veiculo.modelo, veiculo.ano].filter(Boolean).join(' ')
-    : '—';
-  const cor = veiculo?.cor || '—';
-  const km = veiculo?.km_atual ? veiculo.km_atual.toLocaleString('pt-BR') : '—';
-
-  const mecanicoNome = data.mecanico_nome || '—';
-
-  const itemsRows = itens.length > 0
-    ? itens.map((item, idx) => `
+    // Função para gerar linhas de tabela blindada
+    const renderTableRows = (itemsList: PrintReceiptItem[]) => {
+      if (itemsList.length === 0) return `<tr><td colspan="4" style="text-align: center; color: #666; padding: 10px;">Nenhum item</td></tr>`;
+      return itemsList.map(item => `
         <tr>
-          <td style="padding:4px 6px;text-align:center;border-bottom:1px solid #eee;font-size:11px;">${idx + 1}</td>
-          <td style="padding:4px 6px;border-bottom:1px solid #eee;font-size:11px;">${item.descricao}</td>
-          <td style="padding:4px 6px;text-align:center;border-bottom:1px solid #eee;font-size:11px;">${item.quantidade}</td>
-          <td style="padding:4px 6px;text-align:right;border-bottom:1px solid #eee;font-size:11px;">${formatBRL(item.valor_unitario)}</td>
-          <td style="padding:4px 6px;text-align:right;border-bottom:1px solid #eee;font-size:11px;font-weight:600;">${formatBRL(item.valor_total)}</td>
-        </tr>`).join('')
-    : `<tr><td colspan="5" style="padding:12px 6px;text-align:center;color:#999;font-size:11px;">Nenhum item cadastrado</td></tr>`;
+          <td style="padding: 8px; border-bottom: 1px solid #eee;">${item.descricao || '-'}</td>
+          <td style="padding: 8px; border-bottom: 1px solid #eee; text-align: center;">${item.quantidade || 0}</td>
+          <td style="padding: 8px; border-bottom: 1px solid #eee; text-align: right;">${formatCurrency(item.valor_unitario)}</td>
+          <td style="padding: 8px; border-bottom: 1px solid #eee; text-align: right; font-weight: bold;">${formatCurrency(item.valor_total)}</td>
+        </tr>
+      `).join('');
+    };
 
-  return `<!DOCTYPE html>
-<html lang="pt-BR">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>OS #${shortId} — ${companyLine}</title>
-  <style>
-    @page { margin: 10mm; }
-    * { margin: 0; padding: 0; box-sizing: border-box; }
-    body {
-      font-family: 'Courier New', Courier, monospace;
-      font-size: 12px;
-      line-height: 1.5;
-      color: #111;
-      background: #fff;
-      width: 300px;
-      margin: 0 auto;
-      padding: 16px 12px;
+    const html = `
+      <!DOCTYPE html>
+      <html lang="pt-BR">
+      <head>
+        <meta charset="UTF-8">
+        <title>Ordem de Serviço #${safeId}</title>
+        <style>
+          body { font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; color: #333; line-height: 1.4; margin: 0; padding: 20px; font-size: 13px; }
+          .header { display: flex; justify-content: space-between; border-bottom: 2px solid #222; padding-bottom: 20px; margin-bottom: 20px; }
+          .empresa-info { max-width: 60%; }
+          .empresa-nome { font-size: 20px; font-weight: bold; margin: 0 0 5px 0; color: #111; text-transform: uppercase; }
+          .empresa-detalhes { font-size: 12px; color: #555; }
+          .os-info { text-align: right; }
+          .os-title { font-size: 24px; font-weight: bold; color: #222; margin: 0 0 5px 0; letter-spacing: 1px; }
+          .os-badge { display: inline-block; padding: 4px 8px; background: #eee; border-radius: 4px; font-weight: bold; font-size: 12px; margin-bottom: 5px;}
+          .grid-info { display: flex; gap: 20px; margin-bottom: 25px; }
+          .box { border: 1px solid #ddd; border-radius: 6px; padding: 15px; flex: 1; background: #fdfdfd; }
+          .box-title { font-size: 12px; font-weight: bold; color: #888; text-transform: uppercase; margin: 0 0 10px 0; border-bottom: 1px solid #eee; padding-bottom: 5px; }
+          .info-line { margin: 4px 0; }
+          .info-line strong { color: #222; }
+          .section-title { font-size: 14px; font-weight: bold; margin: 20px 0 10px 0; color: #111; text-transform: uppercase; background: #f0f0f0; padding: 6px 10px; border-left: 4px solid #222;}
+          table { border-collapse: collapse; margin-bottom: 15px; width: 100%; }
+          th { background: #fafafa; padding: 8px; text-align: left; font-size: 11px; color: #666; text-transform: uppercase; border-bottom: 2px solid #ddd; }
+          .text-center { text-align: center; }
+          .text-right { text-align: right; }
+          .totals-box { margin-top: 20px; border: 1px solid #ddd; padding: 15px; border-radius: 6px; background: #f9f9f9; width: 300px; float: right; }
+          .total-line { display: flex; justify-content: space-between; margin-bottom: 8px; font-size: 13px; }
+          .total-line.grand-total { border-top: 2px solid #ddd; padding-top: 8px; margin-top: 8px; font-size: 18px; font-weight: bold; color: #111; }
+          .clearfix::after { content: ""; clear: both; display: table; }
+          .footer { margin-top: 60px; text-align: center; font-size: 11px; color: #666; }
+          .signature-area { display: flex; justify-content: space-around; margin-top: 80px; }
+          .signature-line { width: 40%; border-top: 1px solid #333; padding-top: 5px; text-align: center; font-weight: bold; color: #333; }
+          @media print { body { padding: 0; } }
+        </style>
+      </head>
+      <body>
+        <div class="header">
+          <div class="empresa-info">
+            ${data.empresa?.logo_b64 ? `<img src="${data.empresa.logo_b64}" alt="Logo" style="max-height: 60px; margin-bottom: 10px;">` : ''}
+            <h1 class="empresa-nome">${data.empresa?.nome_fantasia || 'NOME DA OFICINA'}</h1>
+            <div class="empresa-detalhes">
+              ${data.empresa?.razao_social ? `Razão Social: ${data.empresa.razao_social}<br>` : ''}
+              ${data.empresa?.cnpj ? `CNPJ: ${data.empresa.cnpj}<br>` : ''}
+              ${data.empresa?.telefone ? `Telefone: ${data.empresa.telefone}<br>` : ''}
+              ${data.empresa?.email ? `E-mail: ${data.empresa.email}<br>` : ''}
+              ${data.empresa?.endereco ? `${data.empresa.endereco}` : ''}
+            </div>
+          </div>
+          <div class="os-info">
+            <h2 class="os-title">ORDEM DE SERVIÇO</h2>
+            <div class="os-badge">Nº ${safeId}</div><br>
+            <div class="empresa-detalhes">
+              <strong>Abertura:</strong> ${formatDate(data.data_abertura)}<br>
+              <strong>Status:</strong> ${data.status || 'Não informado'}<br>
+              ${data.mecanico_nome ? `<strong>Responsável:</strong> ${data.mecanico_nome}` : ''}
+            </div>
+          </div>
+        </div>
+
+        <div class="grid-info">
+          <div class="box">
+            <h3 class="box-title">Dados do Cliente</h3>
+            ${data.clientes ? `
+              <p class="info-line"><strong>Nome:</strong> ${data.clientes.nome || 'Não informado'}</p>
+              <p class="info-line"><strong>Telefone:</strong> ${data.clientes.telefone || 'Não informado'}</p>
+              ${data.clientes.cpf_cnpj ? `<p class="info-line"><strong>CPF/CNPJ:</strong> ${data.clientes.cpf_cnpj}</p>` : ''}
+              ${data.clientes.endereco ? `<p class="info-line"><strong>Endereço:</strong> ${data.clientes.endereco}</p>` : ''}
+            ` : '<p class="info-line">Cliente não informado</p>'}
+          </div>
+          <div class="box">
+            <h3 class="box-title">Dados do Veículo</h3>
+            ${data.veiculos ? `
+              <p class="info-line"><strong>Veículo:</strong> ${data.veiculos.marca || ''} ${data.veiculos.modelo || 'Não informado'} ${data.veiculos.ano ? `(${data.veiculos.ano})` : ''}</p>
+              <p class="info-line"><strong>Placa:</strong> ${data.veiculos.placa ? data.veiculos.placa.toUpperCase() : 'Não informada'}</p>
+              ${data.veiculos.cor ? `<p class="info-line"><strong>Cor:</strong> ${data.veiculos.cor}</p>` : ''}
+              ${data.veiculos.km_atual ? `<p class="info-line"><strong>KM Atual:</strong> ${Number(data.veiculos.km_atual).toLocaleString('pt-BR')} km</p>` : ''}
+            ` : '<p class="info-line">Veículo não informado</p>'}
+          </div>
+        </div>
+
+        ${data.descricao ? `
+          <div style="margin-bottom: 25px;">
+            <strong>Descrição do Problema / Relato do Cliente:</strong><br>
+            <div style="padding: 10px; border-left: 3px solid #ccc; background: #fdfdfd; margin-top: 5px; color: #444;">
+              ${data.descricao.replace(/\n/g, '<br>')}
+            </div>
+          </div>
+        ` : ''}
+
+        <!-- PEÇAS -->
+        <h3 class="section-title">Peças Utilizadas</h3>
+        <table>
+          <thead>
+            <tr>
+              <th>Descrição</th>
+              <th class="text-center" style="width: 80px;">Qtd</th>
+              <th class="text-right" style="width: 120px;">V. Unitário</th>
+              <th class="text-right" style="width: 120px;">Subtotal</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${renderTableRows(pecas)}
+          </tbody>
+        </table>
+
+        <!-- MÃO DE OBRA -->
+        <h3 class="section-title">Mão de Obra e Serviços</h3>
+        <table>
+          <thead>
+            <tr>
+              <th>Descrição</th>
+              <th class="text-center" style="width: 80px;">Qtd</th>
+              <th class="text-right" style="width: 120px;">V. Unitário</th>
+              <th class="text-right" style="width: 120px;">Subtotal</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${renderTableRows(maoObra)}
+          </tbody>
+        </table>
+
+        <!-- TERCEIRIZADOS -->
+        ${terceirizados.length > 0 ? `
+          <h3 class="section-title">Serviços Terceirizados</h3>
+          <table>
+            <thead>
+              <tr>
+                <th>Descrição</th>
+                <th class="text-center" style="width: 80px;">Qtd</th>
+                <th class="text-right" style="width: 120px;">V. Unitário</th>
+                <th class="text-right" style="width: 120px;">Subtotal</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${renderTableRows(terceirizados)}
+            </tbody>
+          </table>
+        ` : ''}
+
+        <div class="clearfix">
+          <div class="totals-box">
+            <div class="total-line">
+              <span>Total Peças:</span>
+              <span>${formatCurrency(pecas.reduce((acc, i) => acc + (i.valor_total || 0), 0))}</span>
+            </div>
+            <div class="total-line">
+              <span>Total Mão de Obra/Serviços:</span>
+              <span>${formatCurrency([...maoObra, ...terceirizados].reduce((acc, i) => acc + (i.valor_total || 0), 0))}</span>
+            </div>
+            ${data.desconto && data.desconto > 0 ? `
+              <div class="total-line" style="color: #d32f2f;">
+                <span>Desconto:</span>
+                <span>- ${formatCurrency(data.desconto)}</span>
+              </div>
+            ` : ''}
+            <div class="total-line grand-total">
+              <span>TOTAL GERAL:</span>
+              <span>${formatCurrency(data.total_geral)}</span>
+            </div>
+            ${data.forma_pagamento ? `
+              <div class="total-line" style="margin-top: 15px; font-size: 11px; color: #666;">
+                <span>Forma de Pagto:</span>
+                <span><strong>${data.forma_pagamento}</strong></span>
+              </div>
+            ` : ''}
+          </div>
+        </div>
+
+        <div class="signature-area">
+          <div class="signature-line">
+            ${data.empresa?.nome_fantasia || 'Oficina'}<br>
+            <span style="font-weight: normal; font-size: 10px;">Assinatura do Responsável</span>
+          </div>
+          <div class="signature-line">
+            ${data.clientes?.nome || 'Cliente'}<br>
+            <span style="font-weight: normal; font-size: 10px;">Assinatura e Aceite</span>
+          </div>
+        </div>
+
+        <div class="footer">
+          Este documento possui validade de orçamento/comprovante de serviço.<br>
+          Garantia de serviços conforme Código de Defesa do Consumidor. Peças sujeitas à garantia do fabricante.
+        </div>
+      </body>
+      </html>
+    `;
+
+    const printWindow = window.open('', '_blank', 'width=800,height=900');
+    if (printWindow) {
+      printWindow.document.write(html);
+      printWindow.document.close();
+      setTimeout(() => {
+        printWindow.print();
+      }, 250);
     }
-    .center { text-align: center; }
-    .bold { font-weight: 700; }
-    .divider {
-      border: none;
-      border-top: 1px dashed #bbb;
-      margin: 10px 0;
-    }
-    .section-title {
-      font-weight: 700;
-      font-size: 11px;
-      text-transform: uppercase;
-      letter-spacing: 1px;
-      color: #555;
-      margin-bottom: 6px;
-    }
-    .info-row {
-      display: flex;
-      justify-content: space-between;
-      font-size: 11px;
-      padding: 1px 0;
-    }
-    .info-label { color: #777; }
-    .info-value { color: #111; font-weight: 500; }
-    table { width: 100%; border-collapse: collapse; margin: 6px 0; }
-    th {
-      text-align: left;
-      padding: 4px 6px;
-      border-bottom: 2px solid #333;
-      font-size: 10px;
-      text-transform: uppercase;
-      letter-spacing: 0.5px;
-      color: #333;
-    }
-    th:last-child, th:nth-child(3), th:nth-child(4) { text-align: center; }
-    th:nth-child(5) { text-align: right; }
-    .total-section {
-      margin-top: 8px;
-      text-align: right;
-    }
-    .total-row {
-      display: flex;
-      justify-content: space-between;
-      font-size: 11px;
-      padding: 2px 0;
-    }
-    .total-row.grand {
-      font-size: 14px;
-      font-weight: 700;
-      border-top: 2px solid #333;
-      padding-top: 6px;
-      margin-top: 4px;
-    }
-    .badge {
-      display: inline-block;
-      padding: 1px 8px;
-      border-radius: 3px;
-      font-size: 10px;
-      font-weight: 600;
-      background: #f0f0f0;
-      border: 1px solid #ccc;
-    }
-    .footer {
-      margin-top: 14px;
-      text-align: center;
-      font-size: 10px;
-      color: #999;
-    }
-    @media print {
-      body { width: 100%; }
-    }
-  </style>
-</head>
-<body>
-
-  <!-- Company Header -->
-  <div class="center">
-    ${logoHtml}
-    <div class="bold" style="font-size:16px;letter-spacing:1px;">${companyLine}</div>
-    ${cnpjLine ? `<div style="font-size:10px;color:#666;margin-top:2px;">${cnpjLine}</div>` : ''}
-    ${enderecoLine ? `<div style="font-size:10px;color:#666;margin-top:1px;">${enderecoLine}</div>` : ''}
-    ${empresa?.telefone ? `<div style="font-size:10px;color:#666;margin-top:1px;">Tel: ${empresa.telefone}</div>` : ''}
-  </div>
-
-  <hr class="divider" />
-
-  <!-- OS Header -->
-  <div class="center">
-    <div class="bold" style="font-size:13px;">ORDEM DE SERVIÇO <span style="font-family:monospace;">#${shortId}</span></div>
-    <div style="margin-top:4px;font-size:11px;">Data: ${data.data_abertura ? formatDateBR(data.data_abertura) : '—'}</div>
-    <div style="margin-top:2px;"><span class="badge">${statusLabel}</span></div>
-  </div>
-
-  ${data.descricao ? `<div style="margin-top:8px;font-size:11px;color:#555;font-style:italic;">"${data.descricao}"</div>` : ''}
-
-  <hr class="divider" />
-
-  <!-- Client Section -->
-  <div class="section-title">Cliente</div>
-  <div class="info-row"><span class="info-label">Nome:</span><span class="info-value">${clienteNome}</span></div>
-  <div class="info-row"><span class="info-label">Telefone:</span><span class="info-value">${clienteTel}</span></div>
-  ${clienteCpf ? `<div class="info-row"><span class="info-label">CPF/CNPJ:</span><span class="info-value">${clienteCpf}</span></div>` : ''}
-
-  <hr class="divider" />
-
-  <!-- Vehicle Section -->
-  <div class="section-title">Veículo</div>
-  <div class="info-row"><span class="info-label">Placa:</span><span class="info-value" style="font-weight:700;">${placa}</span></div>
-  <div class="info-row"><span class="info-label">Modelo:</span><span class="info-value">${modeloVeiculo}</span></div>
-  <div class="info-row"><span class="info-label">Cor:</span><span class="info-value">${cor}</span><span class="info-label" style="margin-left:12px;">KM:</span><span class="info-value">${km}</span></div>
-
-  <hr class="divider" />
-
-  <!-- Items Table -->
-  <div class="section-title">Itens</div>
-  <table>
-    <thead>
-      <tr>
-        <th style="width:20px;">#</th>
-        <th>Descrição</th>
-        <th>Qtd</th>
-        <th>Unit.</th>
-        <th>Total</th>
-      </tr>
-    </thead>
-    <tbody>
-      ${itemsRows}
-    </tbody>
-  </table>
-
-  <!-- Totals -->
-  <div class="total-section">
-    <div class="total-row">
-      <span style="color:#666;">Subtotal:</span>
-      <span>${formatBRL(subtotal)}</span>
-    </div>
-    ${desconto > 0 ? `
-    <div class="total-row">
-      <span style="color:#666;">Desconto:</span>
-      <span style="color:#d00;">- ${formatBRL(desconto)}</span>
-    </div>` : ''}
-    <div class="total-row grand">
-      <span>TOTAL:</span>
-      <span>${formatBRL(total)}</span>
-    </div>
-  </div>
-
-  <hr class="divider" />
-
-  <!-- Payment & Mechanic -->
-  <div class="info-row"><span class="info-label">Pagamento:</span><span class="info-value">${pagamentoLabel}</span></div>
-  <div class="info-row"><span class="info-label">Mecânico:</span><span class="info-value">${mecanicoNome}</span></div>
-
-  <hr class="divider" />
-
-  <!-- Footer -->
-  <div class="footer">
-    <div>Obrigado pela preferência!</div>
-    <div style="margin-top:2px;">${companyLine} — Gestão de Oficina</div>
-  </div>
-
-</body>
-</html>`;
-}
-
-// ─── Main Function ───────────────────────────────────────────────────────────
-
-export function openPrintWindow(data: PrintReceiptData): void {
-  const html = buildReceiptHTML(data);
-
-  const printWindow = window.open('', '_blank', 'width=350,height=600');
-  if (!printWindow) {
-    // If popup is blocked, fall back to document write
-    const iframe = document.createElement('iframe');
-    iframe.style.position = 'fixed';
-    iframe.style.right = '0';
-    iframe.style.bottom = '0';
-    iframe.style.width = '0';
-    iframe.style.height = '0';
-    iframe.style.border = 'none';
-    document.body.appendChild(iframe);
-    const doc = iframe.contentDocument || iframe.contentWindow?.document;
-    if (doc) {
-      doc.open();
-      doc.write(html);
-      doc.close();
-      iframe.contentWindow?.print();
-      setTimeout(() => document.body.removeChild(iframe), 10000);
-    }
-    return;
+  } catch (error) {
+    console.error("Erro ao gerar impressão:", error);
+    alert("Falha ao gerar o layout de impressão. Verifique o console.");
   }
-
-  printWindow.document.open();
-  printWindow.document.write(html);
-  printWindow.document.close();
-
-  // Allow the browser to render before triggering print
-  printWindow.onload = () => {
-    setTimeout(() => {
-      printWindow.print();
-    }, 150);
-  };
-}
-
-// ─── Default Export (component that exposes the function) ────────────────────
-
-export default function PrintReceipt({ data }: { data: PrintReceiptData }) {
-  // This component is a utility — callers use openPrintWindow directly.
-  // Rendering null; the print action is side-effect-only.
-  return null;
-}
+};

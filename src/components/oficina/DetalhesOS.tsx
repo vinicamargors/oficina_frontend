@@ -78,6 +78,7 @@ interface OSDetail {
   data_abertura?: string;
   clientes?: { nome: string; telefone: string; cpf_cnpj?: string; endereco?: string } | null;
   veiculos?: { placa: string; modelo: string; marca?: string; cor?: string; km_atual?: number; ano?: number } | null;
+  usuarios?: { nome: string } | null;
   itens?: OSItem[];
 }
 
@@ -102,13 +103,14 @@ const PAGAMENTO_OPTIONS = [
 
 const ITEM_TYPES = [
   { value: 'PECA', label: 'Peça', icon: Package },
-  { value: 'MAO_DE_OBRA', label: 'Mão de Obra', icon: Wrench },
+  { value: 'MAO_OBRA', label: 'Mão de Obra', icon: Wrench },
   { value: 'TERCEIRIZADO', label: 'Terceirizado', icon: UserCog },
 ];
 
 const tipoLabels: Record<string, string> = {
   PECA: 'Peça',
   MAO_DE_OBRA: 'Mão de Obra',
+  MAO_OBRA: 'Mão de Obra',
   TERCEIRIZADO: 'Terceirizado',
   SERVICO: 'Serviço',
 };
@@ -116,16 +118,17 @@ const tipoLabels: Record<string, string> = {
 const tipoColors: Record<string, { bg: string; text: string; border: string }> = {
   PECA: { bg: 'bg-amber-500/10', text: 'text-amber-400', border: 'border-amber-500/20' },
   MAO_DE_OBRA: { bg: 'bg-blue-500/10', text: 'text-blue-400', border: 'border-blue-500/20' },
+  MAO_OBRA: { bg: 'bg-blue-500/10', text: 'text-blue-400', border: 'border-blue-500/20' },
   SERVICO: { bg: 'bg-blue-500/10', text: 'text-blue-400', border: 'border-blue-500/20' },
   TERCEIRIZADO: { bg: 'bg-orange-500/10', text: 'text-orange-400', border: 'border-orange-500/20' },
 };
 
 const statusConfig: Record<string, { label: string; color: string; borderColor: string; bgColor: string }> = {
-  ORCAMENTO: { label: 'Orçamento', color: 'text-yellow-500', borderColor: 'border-yellow-500/20', bgColor: 'bg-yellow-500/10' },
+  ORCAMENTO: { label: 'Orçamento', color: 'text-zinc-400', borderColor: 'border-zinc-500/20', bgColor: 'bg-zinc-500/10' },
   EXECUCAO: { label: 'Execução', color: 'text-blue-500', borderColor: 'border-blue-500/20', bgColor: 'bg-blue-500/10' },
   AGUARDANDO_PECA: { label: 'Aguard. Peça', color: 'text-orange-500', borderColor: 'border-orange-500/20', bgColor: 'bg-orange-500/10' },
   FINALIZADO: { label: 'Finalizado', color: 'text-emerald-500', borderColor: 'border-emerald-500/20', bgColor: 'bg-emerald-500/10' },
-  PAGO: { label: 'Pago', color: 'text-emerald-400', borderColor: 'border-emerald-500/30', bgColor: 'bg-emerald-600/20' },
+  PAGO: { label: 'Pago', color: 'text-yellow-400', borderColor: 'border-yellow-400/30', bgColor: 'bg-yellow-600/15' },
 };
 
 function getStatusConfig(status: string) {
@@ -175,11 +178,11 @@ function formatRelativeTime(date: Date): string {
 }
 
 const statusDotColor: Record<string, string> = {
-  ORCAMENTO: 'bg-yellow-500',
+  ORCAMENTO: 'bg-zinc-400',
   EXECUCAO: 'bg-blue-500',
   AGUARDANDO_PECA: 'bg-orange-500',
   FINALIZADO: 'bg-emerald-500',
-  PAGO: 'bg-emerald-400',
+  PAGO: 'bg-yellow-400',
 };
 
 // ─── Component ──────────────────────────────────────────────────────────────
@@ -193,6 +196,7 @@ export default function DetalhesOS() {
   // ── Data ─────────────────────────────────────────────────────────────────
 
   const [osData, setOsData] = useState<OSDetail | null>(null);
+  const [empresaData, setEmpresaData] = useState<EmpresaDetails | null>(null);
   const [mecanicos, setMecanicos] = useState<Usuario[]>([]);
   const [estoque, setEstoque] = useState<EstoqueItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -211,6 +215,12 @@ export default function DetalhesOS() {
   const [saving, setSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
 
+  // ── Delete OS State ──────────────────────────────────────────────────────
+
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [deleteReason, setDeleteReason] = useState('');
+  const [deletingOS, setDeletingOS] = useState(false);
+
   // ── Add item modal ───────────────────────────────────────────────────────
 
   const [showAddItem, setShowAddItem] = useState(false);
@@ -224,7 +234,7 @@ export default function DetalhesOS() {
   const [itemEstoqueSearch, setItemEstoqueSearch] = useState('');
   const [estoqueLoading, setEstoqueLoading] = useState(false);
 
-  // ── Delete state ─────────────────────────────────────────────────────────
+  // ── Delete Item state ────────────────────────────────────────────────────
 
   const [deletingItemId, setDeletingItemId] = useState<string | null>(null);
 
@@ -236,7 +246,7 @@ export default function DetalhesOS() {
     changedBy: string;
   }>>([]);
 
-    // ── Computed ─────────────────────────────────────────────────────────────
+  // ── Computed ─────────────────────────────────────────────────────────────
 
   const items = osData?.itens || [];
   const totalCusto = items.reduce((sum, i) => sum + (i.preco_custo * i.quantidade), 0);
@@ -258,41 +268,45 @@ export default function DetalhesOS() {
     ? estoque.filter((e) => e.nome.toLowerCase().includes(itemEstoqueSearch.toLowerCase()))
     : estoque;
 
-
-  // ── Empresa data for receipt ─────────────────────────────────────────────
-
-  const [empresaData, setEmpresaData] = useState<EmpresaDetails | null>(null);
-
-  useEffect(() => {
-    if (!user?.empresa_id) return;
-    apiGet<EmpresaDetails>(`/empresas/${user.empresa_id}/detalhes`).then(setEmpresaData).catch(() => {});
-  }, [user?.empresa_id]);
-
   const handlePrint = useCallback(() => {
-    if (!osData) return;
+    if (!osData) {
+      toast.error('Dados da OS ainda não estão carregados.');
+      return;
+    }
+
+    // Pega o mecânico selecionado no dropdown, ou se não mexeu, pega o que veio da API
     const selectedMec = mecanicos.find((m) => m.id === editMecanico);
+    const nomeMecanico = selectedMec?.nome || osData.usuarios?.nome || '';
+
+    // Pega o KM Atual editado ou o que já estava lá (no veiculo ou na OS)
+    const veiculoKmAtual = editKM ? Number(editKM) : (osData.veiculos?.km_atual || osData.km_atual || 0);
+
     const receiptData: PrintReceiptData = {
       id: osData.id,
       data_abertura: osData.data_abertura || '',
-      status: osData.status,
-      descricao: osData.descricao_problema,
-      forma_pagamento: editPagamento || osData.forma_pagamento,
-      mecanico_nome: selectedMec?.nome,
-      desconto: osData.desconto,
-      total_geral: osData.total_geral || totalVenda,
-      clientes: osData.clientes
-        ? { nome: osData.clientes.nome, telefone: osData.clientes.telefone, cpf_cnpj: osData.clientes.cpf_cnpj, endereco: osData.clientes.endereco }
-        : null,
-      veiculos: osData.veiculos
-        ? { placa: osData.veiculos.placa, modelo: osData.veiculos.modelo, marca: osData.veiculos.marca || '', cor: osData.veiculos.cor || '', km_atual: osData.veiculos.km_atual || osData.km_atual || 0, ano: osData.veiculos.ano || 0 }
-        : null,
-      itens: (osData.itens || []).map((i) => ({ descricao: i.nome, quantidade: i.quantidade, valor_unitario: i.preco_venda, valor_total: i.subtotal })),
-      empresa: empresaData
-        ? { nome_fantasia: empresaData.nome_fantasia, razao_social: empresaData.razao_social, cnpj: empresaData.cnpj, endereco: empresaData.endereco, telefone: empresaData.telefone, logo_b64: empresaData.logo_b64 }
-        : null,
+      status: editStatus || osData.status || '',
+      descricao: editDescricao || osData.descricao_problema || '',
+      forma_pagamento: editPagamento || osData.forma_pagamento || '',
+      mecanico_nome: nomeMecanico,
+      desconto: osData.desconto || 0,
+      total_geral: totalVenda, // Calculado em tempo real com base nos itens da tela
+      clientes: osData.clientes || null,
+      veiculos: osData.veiculos ? {
+        ...osData.veiculos,
+        km_atual: veiculoKmAtual
+      } : null,
+      itens: (osData.itens || []).map((i) => ({ 
+        descricao: i.nome, 
+        quantidade: i.quantidade, 
+        valor_unitario: i.preco_venda, 
+        valor_total: i.subtotal,
+        tipo: i.tipo
+      })),
+      empresa: empresaData || null, // A interface lá já aceita null e o email
     };
+    
     openPrintWindow(receiptData);
-  }, [osData, mecanicos, editMecanico, editPagamento, totalVenda, empresaData]);
+  }, [osData, mecanicos, editMecanico, editPagamento, editStatus, editDescricao, editKM, totalVenda, empresaData]);
 
 
   // ── Fetch data ───────────────────────────────────────────────────────────
@@ -301,39 +315,48 @@ export default function DetalhesOS() {
     if (!user?.empresa_id || !osId) return;
     setLoading(true);
     setError('');
+    
     try {
-      // Since there's no GET single OS endpoint, we fetch dashboard and find the OS
-      const dashboardData = await apiGet<{ ultimas_os: OSDetail[] }>(`/dashboards/${user.empresa_id}`);
-      const found = dashboardData?.ultimas_os?.find((o) => o.id === osId);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const res = await apiGet<any>(`/os/${user.empresa_id}/${osId}/imprimir`);
 
-      if (found) {
-        // Also try to fetch items
-        try {
-          const itemsData = await apiPost<OSItem[]>(`/os/${user.empresa_id}/${osId}/itens`, {});
-          setOsData({ ...found, itens: itemsData || [] });
-        } catch {
-          setOsData(found);
-        }
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const itensMapeados = (res.itens || []).map((i: any) => ({
+        ...i,
+        nome: i.nome_item,
+        preco_custo: i.custo_unitario,
+        preco_venda: i.venda_unitario,
+        subtotal: i.venda_unitario * i.quantidade,
+      }));
 
-        // Set edit state
-        setEditStatus(found.status || '');
-        setEditMecanico(found.mecanico_responsavel_id || '');
-        setEditPagamento(found.forma_pagamento || '');
-        setEditKM(found.km_atual != null ? String(found.km_atual) : '');
-        setEditDescricao(found.descricao_problema || '');
-      } else {
-        // OS not in dashboard — create placeholder
-        setOsData({ id: osId, status: '', itens: [] });
+      const osFormatada = {
+        ...res.ordem,
+        itens: itensMapeados,
+      };
+
+      setOsData(osFormatada);
+
+      if (res.empresa) {
+        setEmpresaData(res.empresa);
       }
 
-      // Fetch mecanicos
+      setEditStatus(osFormatada.status || '');
+      setEditMecanico(osFormatada.mecanico_responsavel_id || '');
+      setEditPagamento(osFormatada.forma_pagamento || '');
+      
+      const kmAtual = osFormatada.veiculos?.km_atual ?? osFormatada.km_atual;
+      setEditKM(kmAtual != null ? String(kmAtual) : '');
+      
+      setEditDescricao(osFormatada.descricao_problema || '');
+
       try {
         const mecs = await apiGet<Usuario[]>(`/usuarios/${user.empresa_id}`);
         setMecanicos(mecs || []);
       } catch { /* ignore */ }
-    } catch {
-      setError('Não foi possível carregar os dados da OS.');
-      // Still set placeholder
+
+    } catch (err) {
+      console.error(err);
+      setError('Não foi possível carregar os dados completos da OS.');
       setOsData({ id: osId, status: '', itens: [] });
     } finally {
       setLoading(false);
@@ -361,7 +384,6 @@ export default function DetalhesOS() {
   const handleSave = async () => {
     if (!user?.empresa_id || !osId) return;
 
-    // Validation: PAGO requires forma_pagamento
     if (editStatus === 'PAGO' && !editPagamento) {
       setError('Para marcar como PAGO, selecione a forma de pagamento.');
       return;
@@ -380,7 +402,6 @@ export default function DetalhesOS() {
         forma_pagamento: editPagamento || undefined,
       });
 
-      // Track status change in history before updating
       if (osData && editStatus && editStatus !== osData.status) {
         setStatusHistory(prev => [{
           status: osData.status,
@@ -389,7 +410,6 @@ export default function DetalhesOS() {
         }, ...prev]);
       }
 
-      // Update local state
       setOsData((prev) => prev ? {
         ...prev,
         status: editStatus,
@@ -411,6 +431,31 @@ export default function DetalhesOS() {
     }
   };
 
+  // ── Delete OS Entirely ───────────────────────────────────────────────────
+
+  const handleDeleteOS = async () => {
+    if (!user?.empresa_id || !osId) return;
+    if (!deleteReason.trim()) {
+      toast.error('Informe o motivo da exclusão para prosseguir.');
+      return;
+    }
+
+    setDeletingOS(true);
+    try {
+      // Passa o motivo no body ou params (usando params que é universal pra DELETE)
+      await apiDelete(`/os/${user.empresa_id}/${osId}?motivo_exclusao=${encodeURIComponent(deleteReason)}`);
+      
+      toast.success('Ordem de Serviço excluída com sucesso!');
+      setShowDeleteModal(false);
+      navigate('ordens-servico');
+    } catch {
+      toast.error('Falha ao excluir a Ordem de Serviço.');
+    } finally {
+      setDeletingOS(false);
+    }
+  };
+
+
   // ── Add item ─────────────────────────────────────────────────────────────
 
   const handleAddItem = async () => {
@@ -430,13 +475,24 @@ export default function DetalhesOS() {
     setItemError('');
 
     try {
-      const newItem = await apiPost<OSItem>(`/os/${user.empresa_id}/${osId}/itens`, {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const rawNewItem = await apiPost<any>(`/os/${user.empresa_id}/${osId}/itens`, {
         tipo: itemTipo,
-        nome: itemNome.trim(),
+        nome_item: itemNome.trim(),
         quantidade: qtd,
-        preco_custo: Number(itemCusto) || 0,
-        preco_venda: Number(itemVenda) || 0,
+        custo_unitario: Number(itemCusto) || 0,
+        venda_unitario: Number(itemVenda) || 0,
       });
+
+      const newItem: OSItem = {
+        id: rawNewItem.id,
+        tipo: rawNewItem.tipo,
+        nome: rawNewItem.nome_item || itemNome.trim(),
+        quantidade: rawNewItem.quantidade || qtd,
+        preco_custo: rawNewItem.custo_unitario || Number(itemCusto) || 0,
+        preco_venda: rawNewItem.venda_unitario || Number(itemVenda) || 0,
+        subtotal: (rawNewItem.venda_unitario || Number(itemVenda) || 0) * (rawNewItem.quantidade || qtd),
+      };
 
       setOsData((prev) => prev ? {
         ...prev,
@@ -504,11 +560,8 @@ export default function DetalhesOS() {
     const sc = getStatusConfig('EXECUCAO');
     return (
       <div className="space-y-6 animate-in fade-in duration-500">
-        {/* Back button skeleton */}
         <div className="w-24 h-10 rounded-xl bg-zinc-800 animate-pulse" />
-
-        {/* Header skeleton */}
-        <div className="relative bg-linear-to-brrom-zinc-900/80 to-zinc-900/40 border border-zinc-800/60 rounded-2xl p-5 md:p-6 animate-pulse">
+        <div className="relative bg-linear-to-br from-zinc-900/80 to-zinc-900/40 border border-zinc-800/60 rounded-2xl p-5 md:p-6 animate-pulse">
           <div className="flex items-center gap-4">
             <div className="w-11 h-11 rounded-xl bg-zinc-800" />
             <div className="space-y-2 flex-1">
@@ -524,8 +577,6 @@ export default function DetalhesOS() {
             </div>
           </div>
         </div>
-
-        {/* Client/Vehicle info skeleton */}
         <div className="bg-zinc-900/50 border border-zinc-800 rounded-xl overflow-hidden animate-pulse">
           <div className="flex items-center gap-2.5 px-5 py-3.5 bg-zinc-900/30 border-b border-zinc-800/50">
             <div className="w-8 h-8 rounded-lg bg-zinc-800" />
@@ -548,8 +599,6 @@ export default function DetalhesOS() {
             </div>
           </div>
         </div>
-
-        {/* Gestão da OS skeleton */}
         <div className="bg-zinc-900/50 border border-zinc-800 rounded-xl overflow-hidden animate-pulse">
           <div className="flex items-center gap-2.5 px-5 py-3.5 bg-zinc-900/30 border-b border-zinc-800/50">
             <div className="w-8 h-8 rounded-lg bg-zinc-800" />
@@ -562,8 +611,6 @@ export default function DetalhesOS() {
             <div className="h-11 bg-zinc-800 rounded-xl" />
           </div>
         </div>
-
-        {/* Items table skeleton */}
         <div className="bg-zinc-900/50 border border-zinc-800 rounded-xl overflow-hidden animate-pulse">
           <div className="flex items-center gap-2.5 px-5 py-3.5 bg-zinc-900/30 border-b border-zinc-800/50">
             <div className="w-8 h-8 rounded-lg bg-zinc-800" />
@@ -578,15 +625,6 @@ export default function DetalhesOS() {
               <div className="h-4 bg-zinc-800/60 rounded w-20" />
             </div>
           ))}
-        </div>
-
-        {/* Totals skeleton */}
-        <div className="bg-linear-to-br from-zinc-900/80 to-zinc-900/40 border border-zinc-800/60 rounded-2xl p-5 md:p-6 space-y-3 animate-pulse">
-          <div className="h-4 bg-zinc-800 rounded w-36" />
-          <div className="flex justify-between"><div className="h-3 bg-zinc-800/60 rounded w-24" /><div className="h-4 bg-zinc-800 rounded w-28" /></div>
-          <div className="flex justify-between"><div className="h-3 bg-zinc-800/60 rounded w-24" /><div className="h-4 bg-zinc-800 rounded w-28" /></div>
-          <div className="h-px bg-zinc-800/50 my-2" />
-          <div className="text-center pt-2"><div className="h-8 bg-zinc-800 rounded w-40 mx-auto" /></div>
         </div>
       </div>
     );
@@ -604,7 +642,7 @@ export default function DetalhesOS() {
         </p>
         <button
           onClick={() => navigate('ordens-servico')}
-          className="inline-flex items-center gap-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-3 px-6 rounded-xl shadow-lg shadow-emerald-600/20 active:scale-[0.98] transition-all"
+          className="inline-flex cursor-pointer items-center gap-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-3 px-6 rounded-xl shadow-lg shadow-emerald-600/20 active:scale-[0.98] transition-all"
         >
           <ArrowLeft className="w-4 h-4" />
           Voltar para Ordens
@@ -624,7 +662,7 @@ export default function DetalhesOS() {
           <div className="flex items-center gap-4 flex-1">
             <button
               onClick={() => navigate('ordens-servico')}
-              className="p-2.5 rounded-xl border border-transparent text-zinc-400 hover:text-white hover:bg-zinc-800 hover:border-zinc-700 transition-all shrink-0"
+              className="p-2.5 cursor-pointer rounded-xl border border-transparent text-zinc-400 hover:text-white hover:bg-zinc-800 hover:border-zinc-700 transition-all shrink-0"
             >
               <ArrowLeft className="w-5 h-5" />
             </button>
@@ -656,12 +694,21 @@ export default function DetalhesOS() {
               </div>
             </div>
           </div>
-          <div className="flex items-center gap-2 shrink-0">
+          <div className="flex flex-wrap items-center gap-2 shrink-0">
+            {/* NOVO BOTÃO DE EXCLUSÃO */}
+            <button
+              onClick={() => setShowDeleteModal(true)}
+              className="inline-flex cursor-pointer items-center gap-2 bg-red-500/10 hover:bg-red-500/20 text-red-500 font-bold py-2.5 px-4 rounded-xl transition-all text-sm border border-red-500/20"
+            >
+              <Trash2 className="w-4 h-4" />
+              <span className="hidden sm:inline">Excluir OS</span>
+            </button>
+
             <PrintReceiptButton onPrint={handlePrint} />
             <button
               onClick={handleSave}
               disabled={saving}
-              className="inline-flex items-center gap-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-2.5 px-4 rounded-xl shadow-lg shadow-emerald-600/20 active:scale-[0.98] transition-all disabled:opacity-50 text-sm"
+              className="inline-flex cursor-pointer items-center gap-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-2.5 px-4 rounded-xl shadow-lg shadow-emerald-600/20 active:scale-[0.98] transition-all disabled:opacity-50 text-sm"
             >
               {saving ? (
                 <Loader2 className="w-4 h-4 animate-spin" />
@@ -678,7 +725,7 @@ export default function DetalhesOS() {
         <div className="p-3.5 rounded-xl bg-red-500/10 border border-red-500/20 text-red-400 text-sm flex items-center gap-2">
           <AlertTriangle className="w-4 h-4 shrink-0" />
           {error}
-          <button onClick={() => setError('')} className="ml-auto hover:text-red-300 transition-colors">
+          <button onClick={() => setError('')} className="ml-auto hover:text-red-300 transition-colors cursor-pointer">
             <X className="w-4 h-4" />
           </button>
         </div>
@@ -776,7 +823,7 @@ export default function DetalhesOS() {
                   <select
                     value={editStatus}
                     onChange={(e) => setEditStatus(e.target.value)}
-                    className="w-full rounded-xl border border-zinc-800 bg-zinc-950 p-3.5 text-sm text-white outline-none focus:border-emerald-500/50 focus:ring-2 focus:ring-emerald-500/10 appearance-none pr-10"
+                    className="w-full rounded-xl border border-zinc-800 bg-zinc-950 p-3.5 text-sm text-white outline-none focus:border-emerald-500/50 focus:ring-2 focus:ring-emerald-500/10 appearance-none pr-10 cursor-pointer"
                   >
                     <option value="">Selecione...</option>
                     {STATUS_OPTIONS.map((s) => (
@@ -815,7 +862,7 @@ export default function DetalhesOS() {
                   <select
                     value={editMecanico}
                     onChange={(e) => setEditMecanico(e.target.value)}
-                    className="w-full rounded-xl border border-zinc-800 bg-zinc-950 p-3.5 text-sm text-white outline-none focus:border-emerald-500/50 focus:ring-2 focus:ring-emerald-500/10 appearance-none pr-10"
+                    className="w-full rounded-xl border border-zinc-800 bg-zinc-950 p-3.5 text-sm text-white outline-none focus:border-emerald-500/50 focus:ring-2 focus:ring-emerald-500/10 appearance-none pr-10 cursor-pointer"
                   >
                     <option value="">Selecione...</option>
                     {mecanicos.map((m) => (
@@ -847,7 +894,7 @@ export default function DetalhesOS() {
                   <select
                     value={editPagamento}
                     onChange={(e) => setEditPagamento(e.target.value)}
-                    className="w-full rounded-xl border border-zinc-800 bg-zinc-950 p-3.5 text-sm text-white outline-none focus:border-emerald-500/50 focus:ring-2 focus:ring-emerald-500/10 appearance-none pr-10"
+                    className="w-full rounded-xl border border-zinc-800 bg-zinc-950 p-3.5 text-sm text-white outline-none focus:border-emerald-500/50 focus:ring-2 focus:ring-emerald-500/10 appearance-none pr-10 cursor-pointer"
                   >
                     <option value="">Selecione...</option>
                     {PAGAMENTO_OPTIONS.map((p) => (
@@ -902,7 +949,7 @@ export default function DetalhesOS() {
               <button
                 onClick={handleSave}
                 disabled={saving}
-                className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-3 px-6 rounded-xl shadow-lg shadow-emerald-600/20 active:scale-[0.98] transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-3 px-6 rounded-xl shadow-lg shadow-emerald-600/20 active:scale-[0.98] transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 cursor-pointer"
               >
                 {saving ? (
                   <>
@@ -1041,7 +1088,7 @@ export default function DetalhesOS() {
                   resetItemForm();
                   setShowAddItem(true);
                 }}
-                className="inline-flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-2.5 px-4 rounded-xl shadow-lg shadow-emerald-600/20 active:scale-[0.98] transition-all text-sm"
+                className="inline-flex cursor-pointer items-center gap-1.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-2.5 px-4 rounded-xl shadow-lg shadow-emerald-600/20 active:scale-[0.98] transition-all text-sm"
               >
                 <Plus className="w-4 h-4" />
                 <span className="hidden sm:inline">Adicionar Item</span>
@@ -1083,7 +1130,7 @@ export default function DetalhesOS() {
                               {tipoLabels[item.tipo] || item.tipo}
                             </span>
                           </td>
-                          <td className="px-4 py-3 text-white font-medium truncate max-w-50">
+                          <td className="px-4 py-3 text-white font-medium truncate max-w-[200px]">
                             {item.nome}
                           </td>
                           <td className="px-4 py-3 text-center tabular-nums hidden sm:table-cell">
@@ -1102,7 +1149,7 @@ export default function DetalhesOS() {
                             <button
                               onClick={() => handleDeleteItem(item.id)}
                               disabled={deletingItemId === item.id}
-                              className="p-1.5 rounded-lg hover:bg-red-500/10 text-zinc-600 hover:text-red-400 transition-all opacity-0 group-hover:opacity-100 disabled:opacity-50"
+                              className="p-1.5 rounded-lg hover:bg-red-500/10 text-zinc-600 hover:text-red-400 transition-all opacity-0 group-hover:opacity-100 disabled:opacity-50 cursor-pointer"
                             >
                               {deletingItemId === item.id ? (
                                 <Loader2 className="w-4 h-4 animate-spin" />
@@ -1153,7 +1200,7 @@ export default function DetalhesOS() {
               </div>
               <button
                 onClick={() => !itemSubmitting && setShowAddItem(false)}
-                className="ml-auto p-1.5 rounded-lg hover:bg-zinc-800 text-zinc-500 hover:text-zinc-300 transition-colors"
+                className="ml-auto p-1.5 cursor-pointer rounded-lg hover:bg-zinc-800 text-zinc-500 hover:text-zinc-300 transition-colors"
               >
                 <X className="w-4 h-4" />
               </button>
@@ -1184,7 +1231,7 @@ export default function DetalhesOS() {
                           setItemNome('');
                           setItemEstoqueSearch('');
                         }}
-                        className={`flex items-center justify-center gap-1.5 p-2.5 rounded-xl border text-xs font-bold transition-all ${
+                        className={`flex cursor-pointer items-center justify-center gap-1.5 p-2.5 rounded-xl border text-xs font-bold transition-all ${
                           isActive
                             ? 'bg-emerald-600/20 text-emerald-400 border-emerald-500/30'
                             : 'bg-zinc-950 text-zinc-500 border-zinc-800 hover:border-zinc-700 hover:text-zinc-300'
@@ -1225,7 +1272,7 @@ export default function DetalhesOS() {
                             <button
                               key={e.id}
                               onClick={() => handleSelectEstoque(e)}
-                              className="w-full text-left px-4 py-3 hover:bg-zinc-800 transition-colors border-b border-zinc-800/50 last:border-0"
+                              className="w-full cursor-pointer text-left px-4 py-3 hover:bg-zinc-800 transition-colors border-b border-zinc-800/50 last:border-0"
                             >
                               <p className="text-white text-sm font-medium">{e.nome}</p>
                               <p className="text-zinc-500 text-xs">
@@ -1328,14 +1375,14 @@ export default function DetalhesOS() {
               <div className="flex gap-3 pt-2">
                 <button
                   onClick={() => !itemSubmitting && setShowAddItem(false)}
-                  className="flex-1 py-3 px-4 rounded-xl border border-zinc-800 text-zinc-400 font-semibold text-sm hover:bg-zinc-800/50 transition-colors"
+                  className="flex-1 cursor-pointer py-3 px-4 rounded-xl border border-zinc-800 text-zinc-400 font-semibold text-sm hover:bg-zinc-800/50 transition-colors"
                 >
                   Cancelar
                 </button>
                 <button
                   onClick={handleAddItem}
                   disabled={itemSubmitting}
-                  className="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-3 px-6 rounded-xl shadow-lg shadow-emerald-600/20 active:scale-[0.98] transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+                  className="flex-1 cursor-pointer bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-3 px-6 rounded-xl shadow-lg shadow-emerald-600/20 active:scale-[0.98] transition-all disabled:opacity-50 flex items-center justify-center gap-2"
                 >
                   {itemSubmitting ? (
                     <>
@@ -1354,6 +1401,73 @@ export default function DetalhesOS() {
           </div>
         </div>
       )}
+
+      {/* ─── Delete OS Modal ────────────────────────────────────────────────── */}
+      {showDeleteModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div
+            className="absolute inset-0 glass"
+            onClick={() => !deletingOS && setShowDeleteModal(false)}
+          />
+          <div className="relative bg-zinc-900 border border-zinc-800 rounded-2xl w-full max-w-md shadow-2xl animate-in zoom-in-95">
+            <div className="flex items-center gap-2.5 px-5 py-4 bg-red-500/10 border-b border-red-500/20 rounded-t-2xl">
+              <div className="w-8 h-8 rounded-lg bg-red-500/20 flex items-center justify-center">
+                <AlertTriangle className="w-4 h-4 text-red-400" />
+              </div>
+              <div>
+                <h2 className="text-sm font-bold text-red-400">Excluir Ordem de Serviço</h2>
+                <p className="text-[10px] text-red-400/70 mt-0.5">Esta ação não pode ser desfeita</p>
+              </div>
+            </div>
+
+            <div className="p-5 space-y-4">
+              <p className="text-sm text-zinc-400">
+                Você está prestes a excluir a OS <strong className="text-white">#{osId.substring(0, 8)}</strong>. Para mantermos o registro de auditoria, por favor, informe o motivo da exclusão.
+              </p>
+
+              <div>
+                <label className="text-xs font-semibold uppercase tracking-wider text-zinc-400 mb-1.5 block">
+                  Motivo da Exclusão *
+                </label>
+                <textarea
+                  rows={3}
+                  placeholder="Ex: Cliente desistiu do serviço..."
+                  value={deleteReason}
+                  onChange={(e) => setDeleteReason(e.target.value)}
+                  className="w-full rounded-xl border border-zinc-800 bg-zinc-950 p-3.5 text-sm text-white placeholder-zinc-600 outline-none focus:border-red-500/50 focus:ring-2 focus:ring-red-500/10 resize-none"
+                />
+              </div>
+
+              <div className="flex gap-3 pt-2">
+                <button
+                  onClick={() => !deletingOS && setShowDeleteModal(false)}
+                  className="flex-1 cursor-pointer py-3 px-4 rounded-xl border border-zinc-800 text-zinc-400 font-semibold text-sm hover:bg-zinc-800/50 transition-colors"
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={handleDeleteOS}
+                  disabled={deletingOS || !deleteReason.trim()}
+                  className="flex-1 cursor-pointer bg-red-600 hover:bg-red-500 text-white font-bold py-3 px-6 rounded-xl shadow-lg shadow-red-600/20 active:scale-[0.98] transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+                >
+                  {deletingOS ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      Excluindo...
+                    </>
+                  ) : (
+                    <>
+                      <Trash2 className="w-4 h-4" />
+                      Confirmar Exclusão
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }

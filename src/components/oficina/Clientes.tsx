@@ -219,15 +219,14 @@ export default function Clientes() {
     };
   }, [searchTerm]);
 
-  const filteredClientes = clientes.filter((c) => {
-    if (!debouncedSearch) return true;
-    const term = debouncedSearch.toLowerCase();
-    return (
-      c.nome.toLowerCase().includes(term) ||
-      c.telefone.toLowerCase().includes(term) ||
-      c.cpf_cnpj.toLowerCase().includes(term)
-    );
-  });
+  const term = searchTerm.toLowerCase();
+    const filteredClientes = clientes.filter((c) => {
+      return (
+        (c.nome?.toLowerCase().includes(term)) ||
+        (c.telefone?.toLowerCase().includes(term)) ||
+        (c.cpf_cnpj?.toLowerCase().includes(term))
+      );
+    });
 
   /* ─── Stats ─── */
   const totalClientes = clientes.length;

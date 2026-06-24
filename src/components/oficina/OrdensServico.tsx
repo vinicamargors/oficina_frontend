@@ -252,19 +252,13 @@ export default function OrdensServico() {
       if (statusFilter !== 'Todos') params.set('status', statusFilter);
       if (search.trim()) params.set('search', search.trim());
 
-      const raw = await apiGet<OSListResponse | OSItem[]>(`/os/?${params.toString()}`);
+      // Agora a gente sabe que SEMPRE vem o objeto OSListResponse, então tipamos direto
+      const raw = await apiGet<OSListResponse>(`/os/?${params.toString()}`);
 
-      if (Array.isArray(raw)) {
-        // fallback: backend retornou array simples (sem paginação)
-        const sorted = [...raw].sort(
-          (a, b) => new Date(b.data_abertura).getTime() - new Date(a.data_abertura).getTime()
-        );
-        setOrdens(sorted);
-        setTotalCount(sorted.length);
-      } else {
-        setOrdens(raw.items ?? []);
-        setTotalCount(raw.total ?? 0);
-      }
+      // Seta direto as ordens e o total real do banco. Zero gambiarra.
+      setOrdens(raw.items ?? []);
+      setTotalCount(raw.total ?? 0);
+
     } catch {
       setError('Não foi possível carregar as ordens de serviço.');
     } finally {

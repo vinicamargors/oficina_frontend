@@ -7,16 +7,16 @@ import {
   FileText,
   Clock,
   CarFront,
-  User,
   AlertTriangle,
   Filter,
   X,
   ArrowRight,
   GitBranch,
   Download,
-  ChevronLeft, 
+  ChevronLeft,
   ChevronRight,
   LayoutList,
+  LayoutGrid,
 } from 'lucide-react';
 import { apiGet } from '@/lib/api';
 import { useAuthStore } from '@/stores/auth';
@@ -39,6 +39,8 @@ interface OSListResponse {
   skip: number;
   limit: number;
 }
+
+type ViewMode = 'cards' | 'list';
 
 const PAGE_SIZE = 18;
 
@@ -183,7 +185,6 @@ function getClientInitials(nome?: string | null): string {
 function CardSkeleton() {
   return (
     <div className="bg-zinc-900/50 border border-zinc-800 rounded-xl p-4 md:p-6 animate-pulse">
-      {/* Top row: date + status badge */}
       <div className="flex items-start justify-between gap-2 mb-4">
         <div className="flex items-center gap-2">
           <div className="w-3.5 h-3.5 rounded-sm bg-zinc-800" />
@@ -191,23 +192,20 @@ function CardSkeleton() {
         </div>
         <div className="w-16 h-5 rounded-md bg-zinc-800" />
       </div>
-      {/* Client row */}
       <div className="flex items-start gap-3 mb-3">
-        <div className="w-9 h-9 rounded-full bg-zinc-800 flex-shrink-0" />
+        <div className="w-9 h-9 rounded-full bg-zinc-800 shrink-0" />
         <div className="flex-1 space-y-2">
           <div className="w-32 h-3.5 rounded bg-zinc-800" />
           <div className="w-24 h-3 rounded bg-zinc-800/60" />
         </div>
       </div>
-      {/* Vehicle row */}
       <div className="flex items-start gap-3 mb-4">
-        <div className="w-8 h-8 rounded-lg bg-zinc-800 flex-shrink-0" />
+        <div className="w-8 h-8 rounded-lg bg-zinc-800 shrink-0" />
         <div className="flex-1 space-y-2">
           <div className="w-36 h-3.5 rounded bg-zinc-800" />
           <div className="w-16 h-3 rounded bg-zinc-800/60" />
         </div>
       </div>
-      {/* Bottom: total */}
       <div className="flex items-center justify-between pt-3 border-t border-zinc-800/50">
         <div className="w-10 h-3 rounded bg-zinc-800/60" />
         <div className="w-24 h-5 rounded bg-zinc-800" />
@@ -222,6 +220,10 @@ export default function OrdensServico() {
   const user = useAuthStore((s) => s.user);
   const navigate = useAppStore((s) => s.navigate);
 
+  // detecta mobile para definir viewMode padrão
+  const defaultView: ViewMode =
+    typeof window !== 'undefined' && window.innerWidth < 768 ? 'cards' : 'list';
+
   const [ordens, setOrdens] = useState<OSItem[]>([]);
   const [totalCount, setTotalCount] = useState(0);
   const [currentPage, setCurrentPage] = useState(0);
@@ -230,6 +232,7 @@ export default function OrdensServico() {
   const [activeFilter, setActiveFilter] = useState('Todos');
   const [searchTerm, setSearchTerm] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
+  const [viewMode, setViewMode] = useState<ViewMode>(defaultView);
   const searchTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // ── Fetch data ──────────────────────────────────────────────────────────
@@ -243,17 +246,22 @@ export default function OrdensServico() {
         empresa_id: user.empresa_id,
         skip: String(page * PAGE_SIZE),
         limit: String(PAGE_SIZE),
+        order_by: 'data_abertura',
+        order_dir: 'desc',
       });
 
       if (statusFilter !== 'Todos') params.set('status', statusFilter);
       if (search.trim()) params.set('search', search.trim());
 
-      // Suporta tanto array simples quanto { items, total }
       const raw = await apiGet<OSListResponse | OSItem[]>(`/os/?${params.toString()}`);
 
       if (Array.isArray(raw)) {
-        setOrdens(raw);
-        setTotalCount(raw.length);
+        // fallback: array simples sem paginação do backend
+        const sorted = [...raw].sort(
+          (a, b) => new Date(b.data_abertura).getTime() - new Date(a.data_abertura).getTime()
+        );
+        setOrdens(sorted);
+        setTotalCount(sorted.length);
       } else {
         setOrdens(raw.items ?? []);
         setTotalCount(raw.total ?? 0);
@@ -265,13 +273,14 @@ export default function OrdensServico() {
     }
   }, [user?.empresa_id]);
 
-useEffect(() => {
-  setCurrentPage(0);
-}, [activeFilter, debouncedSearch]);
+  // reset página ao mudar filtro ou busca
+  useEffect(() => {
+    setCurrentPage(0);
+  }, [activeFilter, debouncedSearch]);
 
-useEffect(() => {
-  fetchData(currentPage, activeFilter, debouncedSearch);
-}, [fetchData, currentPage, activeFilter, debouncedSearch]);
+  useEffect(() => {
+    fetchData(currentPage, activeFilter, debouncedSearch);
+  }, [fetchData, currentPage, activeFilter, debouncedSearch]);
 
   // ── Debounce search ─────────────────────────────────────────────────────
 
@@ -285,29 +294,28 @@ useEffect(() => {
     };
   }, [searchTerm]);
 
-  // ── Status counts ───────────────────────────────────────────────────────
+  // ── Status counts — contagem local para pills (baseada na página atual) ─
 
   const statusCounts = useMemo(() => {
-    const counts: Record<string, number> = { Todos: ordens.length };
+    const counts: Record<string, number> = { Todos: totalCount };
     for (const os of ordens) {
       counts[os.status] = (counts[os.status] || 0) + 1;
     }
     return counts;
-  }, [ordens]);
+  }, [ordens, totalCount]);
 
-    // ── Pagination derived ──────────────────────────────────────────────────
+  // ── Pagination derived ───────────────────────────────────────────────────
+
   const totalPages = Math.max(1, Math.ceil(totalCount / PAGE_SIZE));
   const hasPrev = currentPage > 0;
   const hasNext = currentPage < totalPages - 1;
-
 
   // ── Render: Loading ─────────────────────────────────────────────────────
 
   if (loading) {
     return (
       <div className="space-y-6 animate-in fade-in duration-500">
-        {/* Header skeleton */}
-        <div className="relative bg-gradient-to-r from-zinc-900/80 to-zinc-900/40 border border-zinc-800/60 rounded-2xl p-5 md:p-6">
+        <div className="relative bg-linear-to-r from-zinc-900/80 to-zinc-900/40 border border-zinc-800/60 rounded-2xl p-5 md:p-6">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
             <div className="space-y-2">
               <div className="w-56 h-7 rounded-lg bg-zinc-800 animate-pulse" />
@@ -319,15 +327,12 @@ useEffect(() => {
             </div>
           </div>
         </div>
-        {/* Search skeleton */}
         <div className="w-full h-11 rounded-xl bg-zinc-800/50 border border-zinc-800 animate-pulse" />
-        {/* Filters skeleton */}
         <div className="flex gap-2 overflow-hidden">
           {Array.from({ length: 6 }).map((_, i) => (
-            <div key={i} className="w-20 h-8 rounded-lg bg-zinc-800 animate-pulse flex-shrink-0" />
+            <div key={i} className="w-20 h-8 rounded-lg bg-zinc-800 animate-pulse shrink-0" />
           ))}
         </div>
-        {/* Cards skeleton grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {Array.from({ length: 6 }).map((_, i) => (
             <CardSkeleton key={i} />
@@ -341,8 +346,8 @@ useEffect(() => {
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
-      {/* Header with gradient card */}
-      <div className="relative bg-gradient-to-r from-zinc-900/80 to-zinc-900/40 border border-zinc-800/60 rounded-2xl p-5 md:p-6">
+      {/* Header */}
+      <div className="relative bg-linear-to-r from-zinc-900/80 to-zinc-900/40 border border-zinc-800/60 rounded-2xl p-5 md:p-6">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div>
             <h1 className="text-2xl font-bold text-white">
@@ -353,14 +358,29 @@ useEffect(() => {
             </p>
           </div>
           <div className="flex items-center gap-3">
-            {/* View toggle: list / pipeline */}
+            {/* View toggle: list / cards / pipeline */}
             <div className="inline-flex items-center bg-zinc-800/50 border border-zinc-700/50 rounded-xl p-0.5">
               <button
-                onClick={() => navigate('ordens-servico')}
-                className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-bold bg-emerald-600/20 text-emerald-400 border border-emerald-500/30 transition-all"
+                onClick={() => setViewMode('list')}
+                className={`inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-bold transition-all ${
+                  viewMode === 'list'
+                    ? 'bg-emerald-600/20 text-emerald-400 border border-emerald-500/30'
+                    : 'text-zinc-400 hover:text-white hover:bg-zinc-700/50'
+                }`}
               >
                 <LayoutList className="w-3.5 h-3.5" />
                 <span className="hidden sm:inline">Lista</span>
+              </button>
+              <button
+                onClick={() => setViewMode('cards')}
+                className={`inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-bold transition-all ${
+                  viewMode === 'cards'
+                    ? 'bg-emerald-600/20 text-emerald-400 border border-emerald-500/30'
+                    : 'text-zinc-400 hover:text-white hover:bg-zinc-700/50'
+                }`}
+              >
+                <LayoutGrid className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">Cards</span>
               </button>
               <button
                 onClick={() => navigate('os-pipeline')}
@@ -370,7 +390,7 @@ useEffect(() => {
                 <span className="hidden sm:inline">Pipeline</span>
               </button>
             </div>
-            {/* Exportar button */}
+            {/* Exportar */}
             <button
               className="inline-flex items-center gap-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 hover:text-white font-bold py-3 px-4 rounded-xl border border-zinc-700/50 active:scale-[0.98] transition-all"
               title="Exportar ordens"
@@ -378,7 +398,7 @@ useEffect(() => {
               <Download className="w-4 h-4" />
               <span className="hidden sm:inline">Exportar</span>
             </button>
-            {/* New OS button */}
+            {/* Nova OS */}
             <button
               onClick={() => navigate('nova-os')}
               className="inline-flex items-center gap-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-3 px-6 rounded-xl shadow-lg shadow-emerald-600/20 active:scale-[0.98] transition-all"
@@ -392,7 +412,7 @@ useEffect(() => {
 
       {error && (
         <div className="p-3 rounded-xl bg-red-500/10 border border-red-500/20 text-red-400 text-sm flex items-center gap-2">
-          <AlertTriangle className="w-4 h-4 flex-shrink-0" />
+          <AlertTriangle className="w-4 h-4 shrink-0" />
           {error}
         </div>
       )}
@@ -417,14 +437,14 @@ useEffect(() => {
         )}
         {debouncedSearch && (
           <p className="text-zinc-500 text-xs mt-1.5 ml-1">
-            {ordens.length} resultado{ordens.length !== 1 ? 's' : ''} encontrado{ordens.length !== 1 ? 's' : ''}
+            {totalCount} resultado{totalCount !== 1 ? 's' : ''} encontrado{totalCount !== 1 ? 's' : ''}
           </p>
         )}
       </div>
 
-      {/* Status filter pills with count badges & sliding indicator */}
+      {/* Status filter pills */}
       <div className="flex gap-2 overflow-x-auto pb-2 custom-scrollbar">
-        <Filter className="w-4 h-4 text-zinc-500 flex-shrink-0 mt-2" />
+        <Filter className="w-4 h-4 text-zinc-500 shrink-0 mt-2" />
         {STATUS_FILTERS.map((f) => {
           const isActive = activeFilter === f.key;
           const count = statusCounts[f.key] ?? 0;
@@ -435,7 +455,7 @@ useEffect(() => {
             <button
               key={f.key}
               onClick={() => setActiveFilter(f.key)}
-              className={`relative flex items-center gap-1.5 flex-shrink-0 px-3 py-1.5 rounded-xl text-xs font-bold border transition-all duration-200 whitespace-nowrap ${
+              className={`relative flex items-center gap-1.5 shrink-0 px-3 py-1.5 rounded-xl text-xs font-bold border transition-all duration-200 whitespace-nowrap ${
                 isActive
                   ? isTodos
                     ? 'bg-emerald-600/15 text-emerald-400 border-emerald-500/30 py-2 px-4 text-[13px]'
@@ -443,11 +463,10 @@ useEffect(() => {
                   : 'bg-zinc-900/50 text-zinc-500 border-zinc-800 hover:border-zinc-700 hover:text-zinc-300'
               } ${hasZero && !isActive ? 'opacity-60' : ''}`}
             >
-              {/* Sliding indicator line under active pill */}
               {isActive && (
                 <span className="absolute bottom-0 left-2 right-2 h-0.5 rounded-full bg-emerald-400/60 animate-slide-indicator" />
               )}
-              <span className={`w-1.5 h-1.5 rounded-full ${isActive ? (isTodos ? 'bg-emerald-400' : 'bg-emerald-400') : (statusDotColor[f.key] || 'bg-zinc-600')}`} />
+              <span className={`w-1.5 h-1.5 rounded-full ${isActive ? 'bg-emerald-400' : (statusDotColor[f.key] || 'bg-zinc-600')}`} />
               {f.label}
               <span className={`ml-0.5 text-[10px] px-1.5 py-0.5 rounded-full ${isActive ? 'bg-emerald-500/20 text-emerald-300' : 'opacity-70'}`}>
                 {count}
@@ -457,11 +476,10 @@ useEffect(() => {
         })}
       </div>
 
-      {/* OS Cards Grid */}
+      {/* OS List / Cards / Empty */}
       {ordens.length === 0 ? (
         <div className="text-center py-20 relative">
-          {/* Emerald glow background */}
-          <div className="absolute inset-0 rounded-2xl bg-[radial-gradient(ellipse_at_center,_rgba(16,185,129,0.06)_0%,_transparent_70%)]" />
+          <div className="absolute inset-0 rounded-2xl bg-[radial-gradient(ellipse_at_center,rgba(16,185,129,0.06)_0%,transparent_70%)]" />
           <div className="relative z-10">
             <div className="w-24 h-24 mx-auto mb-6 rounded-2xl bg-zinc-800/50 border border-zinc-800 flex items-center justify-center glow-emerald">
               <FileText className="w-12 h-12 text-emerald-500/60" />
@@ -481,7 +499,80 @@ useEffect(() => {
             </button>
           </div>
         </div>
+      ) : viewMode === 'list' ? (
+        /* ── MODO LISTA ── */
+        <div className="rounded-xl border border-zinc-800 overflow-hidden">
+          {/* Header da tabela */}
+          <div className="hidden md:grid grid-cols-[2fr_1.2fr_1fr_1.2fr_130px] gap-4 px-4 py-2.5 bg-zinc-900/80 border-b border-zinc-800 text-zinc-500 text-xs font-semibold uppercase tracking-wider">
+            <span>Cliente / Veículo</span>
+            <span>Placa</span>
+            <span>Abertura</span>
+            <span>Status</span>
+            <span className="text-right">Total</span>
+          </div>
+          {/* Rows */}
+          {ordens.map((os) => {
+            const sc = getStatusConfig(os.status);
+            const overdue = isOverdue(os.status, os.data_abertura);
+            const initials = getClientInitials(os.clientes?.nome);
+            const daysOpen = getDaysOpen(os.data_abertura);
+
+            return (
+              <div
+                key={os.id}
+                onClick={() => navigate('detalhes-os', { id: os.id })}
+                className="grid grid-cols-1 md:grid-cols-[2fr_1.2fr_1fr_1.2fr_130px] gap-2 md:gap-4 px-4 py-3 border-b border-zinc-800/50 last:border-0 hover:bg-zinc-900/60 cursor-pointer group transition-colors"
+              >
+                {/* Cliente + Veículo */}
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <div className="w-7 h-7 rounded-full bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400 text-[10px] font-bold shrink-0">
+                    {initials}
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-white text-sm font-medium truncate group-hover:text-emerald-400 transition-colors">
+                      {os.clientes?.nome || '—'}
+                    </p>
+                    <p className="text-zinc-500 text-xs truncate">
+                      {os.veiculos?.modelo || '—'}
+                    </p>
+                  </div>
+                </div>
+                {/* Placa */}
+                <div className="flex items-center">
+                  <span className="px-2 py-0.5 rounded bg-white/5 border border-zinc-700/50 text-zinc-300 text-[10px] font-mono font-bold uppercase tracking-wider">
+                    {os.veiculos?.placa || '—'}
+                  </span>
+                </div>
+                {/* Data */}
+                <div className="flex items-center gap-1.5 text-zinc-400 text-xs">
+                  <Clock className="w-3 h-3 shrink-0" />
+                  {formatDate(os.data_abertura)}
+                  {daysOpen > 0 && !['FINALIZADO', 'PAGO'].includes(os.status) && (
+                    <span className={`text-[10px] font-bold ${getDaysOpenColor(daysOpen).text}`}>
+                      ({daysOpen}d)
+                    </span>
+                  )}
+                </div>
+                {/* Status */}
+                <div className="flex items-center gap-2">
+                  <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 text-[10px] rounded font-bold border ${sc.bgColor} ${sc.color} ${sc.borderColor}`}>
+                    <span className={`w-1.5 h-1.5 rounded-full ${sc.dotColor} ${sc.pulse ? 'animate-pulse' : ''}`} />
+                    {sc.label}
+                  </span>
+                  {overdue && <AlertTriangle className="w-3.5 h-3.5 text-red-500 shrink-0" />}
+                </div>
+                {/* Total */}
+                <div className="flex items-center md:justify-end">
+                  <span className="text-emerald-400 font-bold text-sm tabular-nums">
+                    {formatCurrency(os.total_geral)}
+                  </span>
+                </div>
+              </div>
+            );
+          })}
+        </div>
       ) : (
+        /* ── MODO CARDS ── */
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {ordens.map((os) => {
             const sc = getStatusConfig(os.status);
@@ -499,17 +590,16 @@ useEffect(() => {
                   isPeca ? 'animate-pulse-border' : 'border-zinc-800'
                 }`}
               >
-                {/* Top accent line based on status */}
-                <div className={`absolute top-0 left-4 right-4 h-px bg-gradient-to-r from-transparent ${statusAccentLine[os.status] || 'via-zinc-600/30'} to-transparent ${isPeca ? 'animate-pulse-dot' : ''}`} />
+                {/* Top accent line */}
+                <div className={`absolute top-0 left-4 right-4 h-px bg-linear-to-r from-transparent ${statusAccentLine[os.status] || 'via-zinc-600/30'} to-transparent ${isPeca ? 'animate-pulse-dot' : ''}`} />
 
-                {/* Card top: date + days indicator + status + arrow */}
+                {/* Card top: date + days + status + arrow */}
                 <div className="flex items-start justify-between gap-2 mb-4">
                   <div className="flex items-center gap-2 text-zinc-500 text-xs">
                     <Clock className="w-3.5 h-3.5" />
                     {formatDate(os.data_abertura)}
                   </div>
-                  <div className="flex items-center gap-2 flex-shrink-0">
-                    {/* Days open indicator */}
+                  <div className="flex items-center gap-2 shrink-0">
                     {daysOpen > 0 && !['FINALIZADO', 'PAGO'].includes(os.status) && (
                       <span className={`inline-flex items-center gap-1 px-2 py-0.5 text-[10px] rounded-md font-bold border whitespace-nowrap ${daysColor.bg} ${daysColor.text} ${daysColor.border}`}>
                         <Clock className="w-3 h-3" />
@@ -522,10 +612,7 @@ useEffect(() => {
                         ATRASADO
                       </span>
                     )}
-                    {/* Status badge with pulsing dot for AGUARDANDO_PECA */}
-                    <span
-                      className={`inline-flex items-center gap-1.5 px-2.5 py-1 text-[10px] md:text-xs rounded-md font-bold border whitespace-nowrap ${sc.bgColor} ${sc.color} ${sc.borderColor}`}
-                    >
+                    <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 text-[10px] md:text-xs rounded-md font-bold border whitespace-nowrap ${sc.bgColor} ${sc.color} ${sc.borderColor}`}>
                       <span className={`w-1.5 h-1.5 rounded-full ${sc.dotColor} ${sc.pulse ? 'animate-pulse-ring' : ''}`} />
                       {sc.label}
                     </span>
@@ -533,9 +620,9 @@ useEffect(() => {
                   </div>
                 </div>
 
-                {/* Client with avatar initials */}
+                {/* Client */}
                 <div className="flex items-start gap-3 mb-3">
-                  <div className="w-9 h-9 rounded-full bg-gradient-to-br from-emerald-500/20 to-emerald-600/5 border border-emerald-500/20 flex items-center justify-center text-emerald-400 text-xs font-bold flex-shrink-0">
+                  <div className="w-9 h-9 rounded-full bg-linear-to-br from-emerald-500/20 to-emerald-600/5 border border-emerald-500/20 flex items-center justify-center text-emerald-400 text-xs font-bold shrink-0">
                     {initials}
                   </div>
                   <div className="min-w-0">
@@ -548,9 +635,9 @@ useEffect(() => {
                   </div>
                 </div>
 
-                {/* Vehicle with license plate badge */}
+                {/* Vehicle */}
                 <div className="flex items-start gap-3 mb-4">
-                  <div className="bg-zinc-800/80 rounded-lg p-2 flex-shrink-0">
+                  <div className="bg-zinc-800/80 rounded-lg p-2 shrink-0">
                     <CarFront className="w-4 h-4 text-zinc-400" />
                   </div>
                   <div className="min-w-0">
@@ -563,12 +650,12 @@ useEffect(() => {
                   </div>
                 </div>
 
-                {/* Bottom: R$ total with emerald gradient */}
+                {/* Total */}
                 <div className="flex items-center justify-between pt-3 border-t border-zinc-800/50">
                   <span className="text-xs font-semibold uppercase tracking-wider text-zinc-500">
                     Total
                   </span>
-                  <span className="text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 to-emerald-300 group-hover:from-emerald-300 group-hover:to-emerald-200 font-bold text-lg tabular-nums transition-all">
+                  <span className="text-transparent bg-clip-text bg-linear-to-r from-emerald-400 to-emerald-300 group-hover:from-emerald-300 group-hover:to-emerald-200 font-bold text-lg tabular-nums transition-all">
                     {formatCurrency(os.total_geral)}
                   </span>
                 </div>
@@ -579,35 +666,36 @@ useEffect(() => {
       )}
 
       {/* Paginação */}
-{totalPages > 1 && (
-  <div className="flex items-center justify-between pt-2">
-    <p className="text-xs text-zinc-500 tabular-nums">
-      Página <span className="text-zinc-300 font-semibold">{currentPage + 1}</span> de{' '}
-      <span className="text-zinc-300 font-semibold">{totalPages}</span>
-      {' '}·{' '}
-      <span className="text-zinc-300 font-semibold">{totalCount}</span> OS no total
-    </p>
-    <div className="flex items-center gap-2">
-      <button
-        onClick={() => setCurrentPage((p) => p - 1)}
-        disabled={!hasPrev}
-        className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-bold border border-zinc-800 bg-zinc-900/50 text-zinc-400 hover:text-white hover:border-zinc-700 disabled:opacity-30 disabled:cursor-not-allowed transition-all"
-      >
-        <ChevronLeft className="w-3.5 h-3.5" />
-        Anterior
-      </button>
-      <button
-        onClick={() => setCurrentPage((p) => p + 1)}
-        disabled={!hasNext}
-        className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-bold border border-zinc-800 bg-zinc-900/50 text-zinc-400 hover:text-white hover:border-zinc-700 disabled:opacity-30 disabled:cursor-not-allowed transition-all"
-      >
-        Próxima
-        <ChevronRight className="w-3.5 h-3.5" />
-      </button>
-    </div>
-  </div>
-)}
-
+      {totalPages > 1 && (
+        <div className="flex items-center justify-between pt-2">
+          <p className="text-xs text-zinc-500 tabular-nums">
+            Página{' '}
+            <span className="text-zinc-300 font-semibold">{currentPage + 1}</span>{' '}
+            de{' '}
+            <span className="text-zinc-300 font-semibold">{totalPages}</span>
+            {' · '}
+            <span className="text-zinc-300 font-semibold">{totalCount}</span> OS no total
+          </p>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setCurrentPage((p) => p - 1)}
+              disabled={!hasPrev}
+              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-bold border border-zinc-800 bg-zinc-900/50 text-zinc-400 hover:text-white hover:border-zinc-700 disabled:opacity-30 disabled:cursor-not-allowed transition-all"
+            >
+              <ChevronLeft className="w-3.5 h-3.5" />
+              Anterior
+            </button>
+            <button
+              onClick={() => setCurrentPage((p) => p + 1)}
+              disabled={!hasNext}
+              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-bold border border-zinc-800 bg-zinc-900/50 text-zinc-400 hover:text-white hover:border-zinc-700 disabled:opacity-30 disabled:cursor-not-allowed transition-all"
+            >
+              Próxima
+              <ChevronRight className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

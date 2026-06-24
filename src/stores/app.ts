@@ -11,7 +11,8 @@ export type Screen =
   | 'clientes'
   | 'veiculos'
   | 'configuracoes'
-  | 'logs';
+  | 'logs'
+  | 'selecionar-empresa';
 
 interface AppStore {
   currentScreen: Screen;

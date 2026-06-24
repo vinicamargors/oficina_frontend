@@ -1,10 +1,12 @@
 'use client';
 
+
 import { useState } from 'react';
 import { Wrench, Loader2, Eye, EyeOff, ShieldCheck, ArrowRight, ClipboardList, Bell, Smartphone, Mail, Lock, Zap, Heart } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useAuthStore } from '@/stores/auth';
 import { useAppStore } from '@/stores/app';
+
 
 export default function Login() {
   const [email, setEmail] = useState('');
@@ -13,17 +15,21 @@ export default function Login() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
+
   const initAuth = useAuthStore((s) => s.initAuth);
   const navigate = useAppStore((s) => s.navigate);
+
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
 
+
     if (!email.trim() || !password.trim()) {
       setError('Preencha todos os campos.');
       return;
     }
+
 
     setLoading(true);
 
@@ -49,22 +55,27 @@ export default function Login() {
 
       const user = useAuthStore.getState().user;
       if (user) {
-        navigate('dashboard');
+        if (user.cargo === 'master') {
+          navigate('selecionar-empresa');
+        } else {
+          navigate('dashboard');
+        }
       } else {
         setError('Erro ao carregar perfil do usuário. Tente novamente.');
         try { await supabase.auth.signOut(); } catch { /* ignore */ }
       }
-    } catch (err) {
-      const errMsg = err instanceof Error ? err.message : '';
-      if (errMsg.includes('Failed to fetch') || errMsg.includes('NetworkError') || errMsg.includes('fetch')) {
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error);
+      if (msg.includes('Failed to fetch') || msg.includes('NetworkError') || msg.includes('fetch')) {
         setError('Erro de conexão. Verifique sua internet e tente novamente.');
       } else {
-        setError('Erro inesperado. Tente novamente.');
+        setError(msg || 'Erro ao fazer login.');
       }
     } finally {
       setLoading(false);
     }
   };
+
 
   return (
     <div className="min-h-screen bg-zinc-950 flex items-center justify-center p-4 relative overflow-hidden">
@@ -74,6 +85,7 @@ export default function Login() {
         <div className="absolute -top-40 -right-40 w-96 h-96 bg-emerald-500/5 rounded-full blur-3xl animate-pulse" />
         <div className="absolute -bottom-40 -left-40 w-96 h-96 bg-emerald-600/5 rounded-full blur-3xl animate-pulse" style={{ animationDelay: '1s' }} />
         <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-emerald-500/3 rounded-full blur-3xl" />
+
 
         {/* Floating particles */}
         <div
@@ -105,6 +117,7 @@ export default function Login() {
           style={{ width: '2px', height: '2px', top: '10%', right: '45%', opacity: 0.3, animation: 'particle-drift-1 9s ease-in-out infinite', animationDelay: '6s' }}
         />
 
+
         {/* Grid pattern */}
         <div
           className="absolute inset-0 opacity-[0.02]"
@@ -116,6 +129,7 @@ export default function Login() {
         {/* Top edge glow */}
         <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-emerald-500/20 to-transparent" />
       </div>
+
 
       <div className="w-full max-w-md relative z-10 animate-in fade-in zoom-in-95 duration-700">
         {/* ── Logo & Brand ── */}
@@ -131,15 +145,18 @@ export default function Login() {
           </p>
         </div>
 
+
         {/* ── Login Card with rotating gradient border ── */}
         <div className="relative p-[1px] rounded-2xl login-border-glow">
           {/* Card top accent */}
           <div className="absolute top-0 left-8 right-8 h-px bg-gradient-to-r from-transparent via-emerald-500/30 to-transparent z-10" />
 
+
           {/* Inner card with noise texture */}
           <div className="relative rounded-[15px] bg-gradient-to-b from-zinc-900/95 to-zinc-900/90 backdrop-blur-xl p-7 shadow-2xl shadow-black/30 noise-overlay overflow-hidden">
             {/* Inner shadow glow at bottom */}
             <div className="absolute bottom-0 left-0 right-0 h-24 bg-gradient-to-t from-emerald-500/5 to-transparent pointer-events-none z-0" />
+
 
             {/* Card content (above noise overlay) */}
             <div className="relative z-10">
@@ -153,6 +170,7 @@ export default function Login() {
                 </div>
               </div>
 
+
               {/* ── Error Alert ── */}
               {error && (
                 <div className="mb-5 p-3.5 rounded-xl bg-red-500/10 border border-red-500/20 text-red-400 text-sm flex items-start gap-2.5 animate-in fade-in slide-in-from-top-2 duration-300">
@@ -162,6 +180,7 @@ export default function Login() {
                   <span className="leading-snug">{error}</span>
                 </div>
               )}
+
 
               <form onSubmit={handleSubmit} className="space-y-5">
                 {/* Email */}
@@ -183,6 +202,7 @@ export default function Login() {
                     />
                   </div>
                 </div>
+
 
                 {/* Password */}
                 <div className="space-y-2">
@@ -217,6 +237,7 @@ export default function Login() {
                   )}
                 </div>
 
+
                 {/* Submit */}
                 <button
                   type="submit"
@@ -238,6 +259,7 @@ export default function Login() {
                 </button>
               </form>
 
+
               {/* Forgot password */}
               <div className="mt-3 text-center">
                 <button
@@ -252,8 +274,10 @@ export default function Login() {
           </div>
         </div>
 
+
         {/* ── Separator ── */}
         <div className="w-12 h-px bg-zinc-800 mx-auto mt-8" />
+
 
         {/* ── Feature Highlights ── */}
         <div className="mt-6 hidden sm:grid sm:grid-cols-3 gap-3 stagger-children">
@@ -288,6 +312,7 @@ export default function Login() {
             </div>
           </div>
         </div>
+
 
         {/* ── Footer ── */}
         <div className="mt-8 text-center space-y-3">

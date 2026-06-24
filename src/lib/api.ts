@@ -1,5 +1,8 @@
 import { supabase } from './supabase';
 import { toastApiError } from './toast';
+import { useMasterStore } from '@/stores/master';
+
+
 
 const BASE_URL = 'https://autotec-backend.onrender.com/api/v1';
 
@@ -14,23 +17,23 @@ async function getAuthHeaders(): Promise<Record<string, string>> {
       headers['Authorization'] = `Bearer ${session.access_token}`;
     }
 
-    // Try to get cargo from localStorage cache for x-cargo header
     if (typeof window !== 'undefined') {
       const cached = localStorage.getItem('autotec-user');
       if (cached) {
         try {
           const user = JSON.parse(cached);
-          if (user?.cargo) {
-            headers['x-cargo'] = user.cargo;
-          }
-        } catch {
-          // ignore parse errors
-        }
+          if (user?.cargo) headers['x-cargo'] = user.cargo;
+        } catch { /* ignore */ }
       }
     }
-  } catch {
-    // ignore auth errors for public endpoints
-  }
+
+    // Master: injeta empresa selecionada no header
+    const empresaSelecionada = useMasterStore.getState().empresaSelecionada;
+    if (empresaSelecionada?.id) {
+      headers['x-empresa-id'] = empresaSelecionada.id;
+    }
+
+  } catch { /* ignore */ }
 
   return headers;
 }

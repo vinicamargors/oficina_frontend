@@ -21,6 +21,7 @@ import {
 import { useAuthStore, type UsuarioProfile } from '@/stores/auth';
 import { useAppStore, type Screen } from '@/stores/app';
 import { apiGet } from '@/lib/api';
+import { useMasterStore } from '@/stores/master';
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -35,15 +36,15 @@ interface NavItem {
 // ── Navigation Config ──────────────────────────────────────────────────────
 
 const navItems: NavItem[] = [
-  { screen: 'dashboard', label: 'Visão Geral', icon: <Home className="w-[18px] h-[18px]" />, roles: ['master', 'DONO', 'MECANICO', 'ATENDENTE', 'FINANCEIRO'], group: 'Operação' },
-  { screen: 'ordens-servico', label: 'Oficina / OS', icon: <Wrench className="w-[18px] h-[18px]" />, roles: ['master', 'DONO', 'MECANICO', 'ATENDENTE', 'FINANCEIRO'], group: 'Operação' },
-  { screen: 'os-pipeline', label: 'Pipeline OS', icon: <GitBranch className="w-[18px] h-[18px]" />, roles: ['master', 'DONO', 'MECANICO', 'ATENDENTE', 'FINANCEIRO'], group: 'Operação' },
-  { screen: 'estoque', label: 'Estoque', icon: <Package className="w-[18px] h-[18px]" />, roles: ['master', 'DONO', 'MECANICO', 'ATENDENTE', 'FINANCEIRO'], group: 'Operação' },
-  { screen: 'financeiro', label: 'Financeiro', icon: <CircleDollarSign className="w-[18px] h-[18px]" />, roles: ['master', 'DONO', 'FINANCEIRO'], group: 'Operação' },
-  { screen: 'clientes', label: 'Clientes', icon: <Users className="w-[18px] h-[18px]" />, roles: ['master', 'DONO', 'MECANICO', 'ATENDENTE', 'FINANCEIRO'], group: 'Cadastro' },
-  { screen: 'veiculos', label: 'Veículos', icon: <CarFront className="w-[18px] h-[18px]" />, roles: ['master', 'DONO', 'MECANICO', 'ATENDENTE', 'FINANCEIRO'], group: 'Cadastro' },
-  { screen: 'configuracoes', label: 'Configurações', icon: <Settings className="w-[18px] h-[18px]" />, roles: ['master', 'DONO'], group: 'Admin' },
-  { screen: 'logs', label: 'Logs', icon: <FileText className="w-[18px] h-[18px]" />, roles: ['master', 'DONO'], group: 'Admin' },
+  { screen: 'dashboard', label: 'Visão Geral', icon: <Home className="w-4.5 h-4.5" />, roles: ['master', 'DONO', 'MECANICO', 'ATENDENTE', 'FINANCEIRO'], group: 'Operação' },
+  { screen: 'ordens-servico', label: 'Oficina / OS', icon: <Wrench className="w-4.5 h-4.5" />, roles: ['master', 'DONO', 'MECANICO', 'ATENDENTE', 'FINANCEIRO'], group: 'Operação' },
+  { screen: 'os-pipeline', label: 'Pipeline OS', icon: <GitBranch className="w-4.5 h-4.5" />, roles: ['master', 'DONO', 'MECANICO', 'ATENDENTE', 'FINANCEIRO'], group: 'Operação' },
+  { screen: 'estoque', label: 'Estoque', icon: <Package className="w-4.5 h-4.5" />, roles: ['master', 'DONO', 'MECANICO', 'ATENDENTE', 'FINANCEIRO'], group: 'Operação' },
+  { screen: 'financeiro', label: 'Financeiro', icon: <CircleDollarSign className="w-4.5 h-4.5" />, roles: ['master', 'DONO', 'FINANCEIRO'], group: 'Operação' },
+  { screen: 'clientes', label: 'Clientes', icon: <Users className="w-4.5 h-4.5" />, roles: ['master', 'DONO', 'MECANICO', 'ATENDENTE', 'FINANCEIRO'], group: 'Cadastro' },
+  { screen: 'veiculos', label: 'Veículos', icon: <CarFront className="w-4.5 h-4.5" />, roles: ['master', 'DONO', 'MECANICO', 'ATENDENTE', 'FINANCEIRO'], group: 'Cadastro' },
+  { screen: 'configuracoes', label: 'Configurações', icon: <Settings className="w-4.5 h-4.5" />, roles: ['master', 'DONO'], group: 'Admin' },
+  { screen: 'logs', label: 'Logs', icon: <FileText className="w-4.5 h-4.5" />, roles: ['master', 'DONO'], group: 'Admin' },
 ];
 
 const cargoLabel: Record<string, string> = {
@@ -76,6 +77,20 @@ function SidebarContent({ onClose, osCount, stockAlert, criticalItems }: Sidebar
   const logout = useAuthStore((s) => s.logout);
   const currentScreen = useAppStore((s) => s.currentScreen);
   const navigate = useAppStore((s) => s.navigate);
+  const empresaSelecionada = useMasterStore((s) => s.empresaSelecionada);
+
+  {user?.cargo === 'master' && empresaSelecionada && (
+    <div className="mx-3 mb-2 p-2 rounded-lg bg-emerald-500/10 border border-emerald-500/20">
+      <p className="text-emerald-400 text-xs font-bold uppercase tracking-wider">Master</p>
+      <p className="text-white text-xs font-medium truncate">{empresaSelecionada.nome}</p>
+      <button
+        onClick={() => navigate('selecionar-empresa')}
+        className="text-zinc-500 hover:text-emerald-400 text-[10px] mt-1 transition-colors"
+      >
+        Trocar empresa →
+      </button>
+    </div>
+  )}
 
   const handleNavigate = (screen: Screen) => {
     navigate(screen);
@@ -127,7 +142,7 @@ function SidebarContent({ onClose, osCount, stockAlert, criticalItems }: Sidebar
     <div className="flex flex-col h-full">
       {/* ── Logo ── */}
       <div className="flex items-center gap-3 px-4 py-5 border-b border-zinc-800/60">
-        <div className="flex items-center justify-center w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-500/20 to-emerald-600/5 border border-emerald-500/20 shadow-lg shadow-emerald-500/5">
+        <div className="flex items-center justify-center w-10 h-10 rounded-xl bg-linear-to-br from-emerald-500/20 to-emerald-600/5 border border-emerald-500/20 shadow-lg shadow-emerald-500/5">
           <Wrench className="w-5 h-5 text-emerald-400" strokeWidth={1.5} />
         </div>
         <div className="flex-1 min-w-0">
@@ -200,10 +215,10 @@ function SidebarContent({ onClose, osCount, stockAlert, criticalItems }: Sidebar
               className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-[13px] font-medium text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/40 transition-all duration-200 border-l-2 border-l-transparent hover:border-l-zinc-600/30"
               aria-label="Notificações"
             >
-              <Bell className="w-[18px] h-[18px]" />
+              <Bell className="w-4.5 h-4.5" />
               <span className="flex-1 text-left">Notificações</span>
               {alertCount > 0 && (
-                <span className="min-w-[18px] h-[18px] px-1 bg-red-500 rounded-full text-[8px] font-bold text-white flex items-center justify-center">
+                <span className="min-w-4.5 h-4.5 px-1 bg-red-500 rounded-full text-[8px] font-bold text-white flex items-center justify-center">
                   {alertCount}
                 </span>
               )}
@@ -216,7 +231,7 @@ function SidebarContent({ onClose, osCount, stockAlert, criticalItems }: Sidebar
                 <div className="absolute -left-[6px] top-4 w-3 h-3 bg-zinc-900 border-t border-l border-zinc-800 -rotate-45" />
 
                 {/* Gradient accent bar */}
-                <div className="h-[2px] bg-gradient-to-r from-emerald-400 via-emerald-400/40 to-transparent" />
+                <div className="h-[2px] bg-linear-to-r from-emerald-400 via-emerald-400/40 to-transparent" />
 
                 {/* Header */}
                 <div className="flex items-center justify-between px-4 py-3 border-b border-zinc-800/50">
@@ -243,7 +258,7 @@ function SidebarContent({ onClose, osCount, stockAlert, criticalItems }: Sidebar
                           className="flex items-start gap-3 p-3 hover:bg-zinc-800/50 transition-colors cursor-pointer border-l-2 border-l-red-500"
                           onClick={() => handleNotifNavigate('estoque')}
                         >
-                          <div className="flex-shrink-0 w-8 h-8 rounded-lg bg-red-500/10 flex items-center justify-center mt-0.5">
+                          <div className="shrink-0 w-8 h-8 rounded-lg bg-red-500/10 flex items-center justify-center mt-0.5">
                             <Package className="w-4 h-4 text-red-400" />
                           </div>
                           <div className="flex-1 min-w-0">
@@ -261,7 +276,7 @@ function SidebarContent({ onClose, osCount, stockAlert, criticalItems }: Sidebar
                           className="flex items-start gap-3 p-3 hover:bg-zinc-800/50 transition-colors cursor-pointer border-l-2 border-l-emerald-400"
                           onClick={() => handleNotifNavigate('ordens-servico')}
                         >
-                          <div className="flex-shrink-0 w-8 h-8 rounded-lg bg-emerald-500/10 flex items-center justify-center mt-0.5">
+                          <div className="shrink-0 w-8 h-8 rounded-lg bg-emerald-500/10 flex items-center justify-center mt-0.5">
                             <Wrench className="w-4 h-4 text-emerald-400" />
                           </div>
                           <div className="flex-1 min-w-0">
@@ -303,12 +318,12 @@ function SidebarContent({ onClose, osCount, stockAlert, criticalItems }: Sidebar
       <div className="px-2.5 py-3 border-t border-zinc-800/60">
         {user && (
           <div className="flex items-center gap-3 px-3 py-2.5 mb-2 rounded-lg bg-zinc-800/30">
-            <div className="flex items-center justify-center w-9 h-9 rounded-full bg-gradient-to-br from-emerald-500/20 to-emerald-600/5 border border-emerald-500/20 text-emerald-400 text-xs font-bold flex-shrink-0">
+            <div className="flex items-center justify-center w-9 h-9 rounded-full bg-linear-to-br from-emerald-500/20 to-emerald-600/5 border border-emerald-500/20 text-emerald-400 text-xs font-bold shrink-0">
               {initials}
             </div>
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-1.5">
-                <span className="relative flex h-2 w-2 flex-shrink-0">
+                <span className="relative flex h-2 w-2 shrink-0">
                   <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
                   <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
                 </span>
@@ -406,8 +421,8 @@ export default function Sidebar() {
               className="relative p-2 -mr-1 rounded-lg text-zinc-400 hover:text-white hover:bg-zinc-800/60 transition-colors"
               aria-label="Notificações"
             >
-              <Bell className="w-[18px] h-[18px]" />
-              <span className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] px-1 bg-red-500 rounded-full text-[8px] font-bold text-white flex items-center justify-center">
+              <Bell className="w-4.5 h-4.5" />
+              <span className="absolute -top-0.5 -right-0.5 min-w-4.5 h-4.5 px-1 bg-red-500 rounded-full text-[8px] font-bold text-white flex items-center justify-center">
                 {alertCount > 0 ? alertCount : ''}
               </span>
             </button>
@@ -419,7 +434,7 @@ export default function Sidebar() {
           {notifOpen && (
             <div className="absolute right-0 top-full mt-2 w-80 bg-zinc-900 border border-zinc-800 rounded-xl shadow-2xl shadow-black/50 z-50 animate-in fade-in slide-in-from-top-2 duration-200 overflow-hidden">
               {/* Gradient accent bar */}
-              <div className="h-[2px] bg-gradient-to-r from-emerald-400 via-emerald-400/40 to-transparent" />
+              <div className="h-[2px] bg-linear-to-r from-emerald-400 via-emerald-400/40 to-transparent" />
               {/* Arrow */}
               <div className="absolute -top-[6px] right-3 w-3 h-3 bg-zinc-900 border-t border-l border-zinc-800 rotate-45" />
 
@@ -449,7 +464,7 @@ export default function Sidebar() {
                         className="flex items-start gap-3 p-3 hover:bg-zinc-800/50 transition-colors cursor-pointer border-l-2 border-l-red-500"
                         onClick={() => handleNotifNavigate('estoque')}
                       >
-                        <div className="flex-shrink-0 w-8 h-8 rounded-lg bg-red-500/10 flex items-center justify-center mt-0.5">
+                        <div className="shrink-0 w-8 h-8 rounded-lg bg-red-500/10 flex items-center justify-center mt-0.5">
                           <Package className="w-4 h-4 text-red-400" />
                         </div>
                         <div className="flex-1 min-w-0">
@@ -468,7 +483,7 @@ export default function Sidebar() {
                         className="flex items-start gap-3 p-3 hover:bg-zinc-800/50 transition-colors cursor-pointer border-l-2 border-l-emerald-400"
                         onClick={() => handleNotifNavigate('ordens-servico')}
                       >
-                        <div className="flex-shrink-0 w-8 h-8 rounded-lg bg-emerald-500/10 flex items-center justify-center mt-0.5">
+                        <div className="shrink-0 w-8 h-8 rounded-lg bg-emerald-500/10 flex items-center justify-center mt-0.5">
                           <Wrench className="w-4 h-4 text-emerald-400" />
                         </div>
                         <div className="flex-1 min-w-0">

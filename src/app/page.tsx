@@ -22,6 +22,7 @@ import Logs from '@/components/oficina/Logs';
 import MobileFAB from '@/components/oficina/MobileFAB';
 import HelpOverlay from '@/components/oficina/HelpOverlay';
 import { Toaster } from 'sonner';
+import SelecionarEmpresa from '@/components/oficina/SelecionarEmpresa';
 
 function ScreenRenderer() {
   const currentScreen = useAppStore((s) => s.currentScreen);
@@ -44,6 +45,8 @@ function ScreenRenderer() {
   }, [currentScreen]);
 
   switch (currentScreen) {
+    case 'selecionar-empresa':
+      return <SelecionarEmpresa />;
     case 'dashboard':
       return <Dashboard />;
     case 'ordens-servico':

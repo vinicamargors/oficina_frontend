@@ -14,6 +14,8 @@ import {
   ArrowRight,
   GitBranch,
   Download,
+  ChevronLeft, 
+  ChevronRight,
   LayoutList,
 } from 'lucide-react';
 import { apiGet } from '@/lib/api';
@@ -31,9 +33,14 @@ interface OSItem {
   veiculos: { placa: string; modelo: string } | null;
 }
 
-interface DashboardResponse {
-  ultimas_os: OSItem[];
+interface OSListResponse {
+  items: OSItem[];
+  total: number;
+  skip: number;
+  limit: number;
 }
+
+const PAGE_SIZE = 18;
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -216,6 +223,8 @@ export default function OrdensServico() {
   const navigate = useAppStore((s) => s.navigate);
 
   const [ordens, setOrdens] = useState<OSItem[]>([]);
+  const [totalCount, setTotalCount] = useState(0);
+  const [currentPage, setCurrentPage] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [activeFilter, setActiveFilter] = useState('Todos');
@@ -225,13 +234,30 @@ export default function OrdensServico() {
 
   // ── Fetch data ──────────────────────────────────────────────────────────
 
-  const fetchData = useCallback(async () => {
+  const fetchData = useCallback(async (page: number, statusFilter: string, search: string) => {
     if (!user?.empresa_id) return;
     setLoading(true);
     setError('');
     try {
-      const data = await apiGet<DashboardResponse>(`/dashboards/${user.empresa_id}`);
-      setOrdens(data?.ultimas_os || []);
+      const params = new URLSearchParams({
+        empresa_id: user.empresa_id,
+        skip: String(page * PAGE_SIZE),
+        limit: String(PAGE_SIZE),
+      });
+
+      if (statusFilter !== 'Todos') params.set('status', statusFilter);
+      if (search.trim()) params.set('search', search.trim());
+
+      // Suporta tanto array simples quanto { items, total }
+      const raw = await apiGet<OSListResponse | OSItem[]>(`/os/?${params.toString()}`);
+
+      if (Array.isArray(raw)) {
+        setOrdens(raw);
+        setTotalCount(raw.length);
+      } else {
+        setOrdens(raw.items ?? []);
+        setTotalCount(raw.total ?? 0);
+      }
     } catch {
       setError('Não foi possível carregar as ordens de serviço.');
     } finally {
@@ -239,9 +265,13 @@ export default function OrdensServico() {
     }
   }, [user?.empresa_id]);
 
-  useEffect(() => {
-    fetchData();
-  }, [fetchData]);
+useEffect(() => {
+  setCurrentPage(0);
+}, [activeFilter, debouncedSearch]);
+
+useEffect(() => {
+  fetchData(currentPage, activeFilter, debouncedSearch);
+}, [fetchData, currentPage, activeFilter, debouncedSearch]);
 
   // ── Debounce search ─────────────────────────────────────────────────────
 
@@ -265,23 +295,11 @@ export default function OrdensServico() {
     return counts;
   }, [ordens]);
 
-  // ── Filter logic ────────────────────────────────────────────────────────
+    // ── Pagination derived ──────────────────────────────────────────────────
+  const totalPages = Math.max(1, Math.ceil(totalCount / PAGE_SIZE));
+  const hasPrev = currentPage > 0;
+  const hasNext = currentPage < totalPages - 1;
 
-  const filteredOrdens = ordens.filter((os) => {
-    // Status filter
-    if (activeFilter !== 'Todos' && os.status !== activeFilter) return false;
-
-    // Search filter
-    if (debouncedSearch) {
-      const term = debouncedSearch.toLowerCase();
-      const clienteNome = os.clientes?.nome?.toLowerCase() || '';
-      const placa = os.veiculos?.placa?.toLowerCase() || '';
-      const osId = os.id.toLowerCase();
-      return clienteNome.includes(term) || placa.includes(term) || osId.startsWith(term);
-    }
-
-    return true;
-  });
 
   // ── Render: Loading ─────────────────────────────────────────────────────
 
@@ -399,7 +417,7 @@ export default function OrdensServico() {
         )}
         {debouncedSearch && (
           <p className="text-zinc-500 text-xs mt-1.5 ml-1">
-            {filteredOrdens.length} resultado{filteredOrdens.length !== 1 ? 's' : ''} encontrado{filteredOrdens.length !== 1 ? 's' : ''}
+            {ordens.length} resultado{ordens.length !== 1 ? 's' : ''} encontrado{ordens.length !== 1 ? 's' : ''}
           </p>
         )}
       </div>
@@ -440,7 +458,7 @@ export default function OrdensServico() {
       </div>
 
       {/* OS Cards Grid */}
-      {filteredOrdens.length === 0 ? (
+      {ordens.length === 0 ? (
         <div className="text-center py-20 relative">
           {/* Emerald glow background */}
           <div className="absolute inset-0 rounded-2xl bg-[radial-gradient(ellipse_at_center,_rgba(16,185,129,0.06)_0%,_transparent_70%)]" />
@@ -465,7 +483,7 @@ export default function OrdensServico() {
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {filteredOrdens.map((os) => {
+          {ordens.map((os) => {
             const sc = getStatusConfig(os.status);
             const overdue = isOverdue(os.status, os.data_abertura);
             const isPeca = os.status === 'AGUARDANDO_PECA';
@@ -559,6 +577,37 @@ export default function OrdensServico() {
           })}
         </div>
       )}
+
+      {/* Paginação */}
+{totalPages > 1 && (
+  <div className="flex items-center justify-between pt-2">
+    <p className="text-xs text-zinc-500 tabular-nums">
+      Página <span className="text-zinc-300 font-semibold">{currentPage + 1}</span> de{' '}
+      <span className="text-zinc-300 font-semibold">{totalPages}</span>
+      {' '}·{' '}
+      <span className="text-zinc-300 font-semibold">{totalCount}</span> OS no total
+    </p>
+    <div className="flex items-center gap-2">
+      <button
+        onClick={() => setCurrentPage((p) => p - 1)}
+        disabled={!hasPrev}
+        className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-bold border border-zinc-800 bg-zinc-900/50 text-zinc-400 hover:text-white hover:border-zinc-700 disabled:opacity-30 disabled:cursor-not-allowed transition-all"
+      >
+        <ChevronLeft className="w-3.5 h-3.5" />
+        Anterior
+      </button>
+      <button
+        onClick={() => setCurrentPage((p) => p + 1)}
+        disabled={!hasNext}
+        className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-bold border border-zinc-800 bg-zinc-900/50 text-zinc-400 hover:text-white hover:border-zinc-700 disabled:opacity-30 disabled:cursor-not-allowed transition-all"
+      >
+        Próxima
+        <ChevronRight className="w-3.5 h-3.5" />
+      </button>
+    </div>
+  </div>
+)}
+
     </div>
   );
 }

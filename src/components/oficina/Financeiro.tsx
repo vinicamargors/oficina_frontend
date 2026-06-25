@@ -1,8 +1,10 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useMemo } from 'react';
 import {
   TrendingUp,
+  TrendingDown,
+  Package,
   BarChart3,
   DollarSign,
   Receipt,
@@ -16,6 +18,12 @@ import {
   ArrowUp,
   ArrowDown,
   PlusCircle,
+  Users,
+  Wrench,
+  Car,
+  PieChart as PieChartIcon,
+  Clock,
+  Target
 } from 'lucide-react';
 import {
   BarChart,
@@ -25,6 +33,7 @@ import {
   PieChart,
   Pie,
   Cell,
+  Sector, 
   XAxis,
   YAxis,
   CartesianGrid,
@@ -51,10 +60,42 @@ interface FinanceiroResponse {
   historico_6_meses: SerieTemporalMes[];
 }
 
+interface ClienteInteligencia {
+  nome: string;
+  lucro: number;
+  faturamento: number;
+  qtd_os: number;
+}
+
+interface MecanicoInteligencia {
+  nome: string;
+  lucro_gerado: number;
+  faturamento_gerado: number;
+  qtd_os: number;
+}
+
+interface MarcaInteligencia {
+  marca: string;
+  lucro: number;
+  faturamento: number;
+  qtd_os: number;
+}
+
+interface FinanceiroInteligencia {
+  top_10_clientes: ClienteInteligencia[];
+  piores_10_clientes: ClienteInteligencia[];
+  produtividade_mecanicos: MecanicoInteligencia[];
+  metodos_pagamento: { forma: string; qtd: number; valor_total: number }[];
+  rentabilidade_marcas: MarcaInteligencia[];
+  origem_faturamento: { pecas: number; mao_obra: number };
+  lead_time_medio_horas: number;
+  taxa_conversao_orcamentos: number;
+}
+
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
 const formatCurrency = (value: number) =>
-  new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value);
+  new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value || 0);
 
 const formatPercent = (value: number) => `${value.toFixed(1)}%`;
 
@@ -65,11 +106,28 @@ const MONTH_LABELS: Record<string, string> = {
 };
 
 function formatMonthLabel(mesAno: string) {
+  if (!mesAno) return '';
+  // Se vier no formato MM/YYYY
+  if (mesAno.includes('/')) {
+    const [m, y] = mesAno.split('/');
+    return `${MONTH_LABELS[m] || m} ${y}`;
+  }
+  // Se vier no formato YYYY-MM
   const parts = mesAno.split('-');
   if (parts.length === 2) {
     return `${MONTH_LABELS[parts[1]] || parts[1]} ${parts[0]}`;
   }
   return mesAno;
+}
+
+function getFirstDayOf6MonthsAgo() {
+  const date = new Date();
+  date.setMonth(date.getMonth() - 5);
+  return new Date(date.getFullYear(), date.getMonth(), 1).toISOString().split('T')[0];
+}
+
+function getToday() {
+  return new Date().toISOString().split('T')[0];
 }
 
 // ── Sparkline SVG ───────────────────────────────────────────────────────────
@@ -266,6 +324,7 @@ function CurrencyTooltip({ active, payload, label }: { active?: boolean; payload
 const RADIAN = Math.PI / 180;
 
 function renderPieLabel({ cx, cy, midAngle, innerRadius, outerRadius, percent }: { cx: number; cy: number; midAngle: number; innerRadius: number; outerRadius: number; percent: number }) {
+  if (percent < 0.05) return null; // Não mostra label se for muito pequeno
   const radius = innerRadius + (outerRadius - innerRadius) * 1.45;
   const x = cx + radius * Math.cos(-midAngle * RADIAN);
   const y = cy + radius * Math.sin(-midAngle * RADIAN);
@@ -276,14 +335,6 @@ function renderPieLabel({ cx, cy, midAngle, innerRadius, outerRadius, percent }:
     </text>
   );
 }
-
-// ── Pie placeholder data ───────────────────────────────────────────────────
-
-const PAYMENT_DATA = [
-  { name: 'PIX', value: 60, color: '#10b981', comparison: 5 },
-  { name: 'Cartão', value: 25, color: '#3b82f6', comparison: -2 },
-  { name: 'Dinheiro', value: 15, color: '#eab308', comparison: -3 },
-];
 
 // ── Skeleton components ─────────────────────────────────────────────────────
 
@@ -310,6 +361,46 @@ function ChartSkeleton() {
   );
 }
 
+// ── Ranking Component ─────────────────────────────────────────────────────
+
+function RankingList({ title, icon: Icon, items, type }: any) {
+  if (!items || items.length === 0) return null;
+  return (
+    <div className="bg-zinc-900/40 border border-zinc-800/60 rounded-xl p-5">
+      <div className="flex items-center gap-2 mb-4">
+        <Icon className="w-5 h-5 text-zinc-400" />
+        <h3 className="text-white font-bold text-sm uppercase tracking-wider">{title}</h3>
+      </div>
+      <div className="space-y-3">
+        {items.map((item: any, idx: number) => {
+          const mainValue = type === 'clientes' || type === 'marcas' ? item.lucro : item.lucro_gerado;
+          const subValue = type === 'clientes' || type === 'marcas' ? item.faturamento : item.faturamento_gerado;
+          const name = item.nome || item.marca;
+          const isNegative = mainValue <= 0;
+
+          return (
+            <div key={idx} className="flex items-center justify-between p-3 rounded-lg bg-zinc-950/50 border border-zinc-800/40 hover:bg-zinc-800/50 transition-colors">
+              <div className="flex items-center gap-3">
+                <span className="text-zinc-600 font-mono text-xs w-4">{idx + 1}º</span>
+                <div>
+                  <p className="text-zinc-200 text-sm font-semibold truncate max-w-[150px] md:max-w-[200px]" title={name}>{name}</p>
+                  <p className="text-zinc-500 text-[10px] uppercase font-bold mt-0.5">{item.qtd_os} OS concluídas</p>
+                </div>
+              </div>
+              <div className="text-right">
+                <p className={`text-sm font-bold tabular-nums ${isNegative ? 'text-red-400' : 'text-emerald-400'}`}>
+                  {formatCurrency(mainValue)}
+                </p>
+                <p className="text-zinc-500 text-[10px] font-mono mt-0.5">Fat: {formatCurrency(subValue)}</p>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 // ── Filter type ─────────────────────────────────────────────────────────────
 
 type FilterOption = '6meses' | 'esteMes' | 'mesPassado';
@@ -320,9 +411,16 @@ export default function Financeiro() {
   const user = useAuthStore((s) => s.user);
   const navigate = useAppStore((s) => s.navigate);
 
+  const [dataInicial, setDataInicial] = useState(getFirstDayOf6MonthsAgo());
+  const [dataFinal, setDataFinal] = useState(getToday());
+
   const [data, setData] = useState<FinanceiroResponse | null>(null);
+  const [intelData, setIntelData] = useState<FinanceiroInteligencia | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  
+  // O filtro local serve APENAS para filtrar o que aparece nos gráficos, 
+  // já que a API puxa o histórico todo do período especificado nas datas.
   const [filter, setFilter] = useState<FilterOption>('6meses');
   const [hoveredSlice, setHoveredSlice] = useState<string | null>(null);
   const [activePieIndex, setActivePieIndex] = useState<number | null>(null);
@@ -335,14 +433,21 @@ export default function Financeiro() {
     setError('');
 
     try {
-      const result = await apiGet<FinanceiroResponse>(`/financeiro/${user.empresa_id}`);
-      setData(result);
+      const qs = `?data_inicial=${dataInicial}&data_final=${dataFinal}`;
+      
+      const [resultGeral, resultIntel] = await Promise.all([
+        apiGet<FinanceiroResponse>(`/financeiro/${user.empresa_id}${qs}`),
+        apiGet<FinanceiroInteligencia>(`/financeiro/inteligencia/${user.empresa_id}${qs}`)
+      ]);
+
+      setData(resultGeral);
+      setIntelData(resultIntel);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Erro ao carregar dados financeiros.');
+      setError(err instanceof Error ? err.message : 'Erro ao carregar dados financeiros da matriz.');
     } finally {
       setLoading(false);
     }
-  }, [user?.empresa_id]);
+  }, [user?.empresa_id, dataInicial, dataFinal]);
 
   useEffect(() => {
     loadData();
@@ -368,13 +473,12 @@ export default function Financeiro() {
     );
   }
 
-  // ── Filtered chart data ─────────────────────────────────────────────────
+  // ── Filtered chart data (Filtro local do histórico) ─────────────────────
 
   const getFilteredData = (): SerieTemporalMes[] => {
     if (!data?.historico_6_meses) return [];
 
     const hist = data.historico_6_meses;
-
     if (filter === '6meses') return hist;
 
     const now = new Date();
@@ -384,12 +488,31 @@ export default function Financeiro() {
       ? { year: (now.getFullYear() - 1).toString(), month: '12' }
       : { year: currentYear, month: (now.getMonth()).toString().padStart(2, '0') };
 
-    const targetKey = filter === 'esteMes'
-      ? `${currentYear}-${currentMonth}`
-      : `${lastMonth.year}-${lastMonth.month}`;
+    // Como a API as vezes manda MM/YYYY e outras YYYY-MM, vamos tentar mapear ambos
+    const targetKeyYYYYMM = filter === 'esteMes' ? `${currentYear}-${currentMonth}` : `${lastMonth.year}-${lastMonth.month}`;
+    const targetKeyMMYYYY = filter === 'esteMes' ? `${currentMonth}/${currentYear}` : `${lastMonth.month}/${lastMonth.year}`;
 
-    return hist.filter((item) => item.mes_ano === targetKey);
+    return hist.filter((item) => item.mes_ano === targetKeyYYYYMM || item.mes_ano === targetKeyMMYYYY);
   };
+
+  // ── Mapeamento Dinâmico de Pagamentos (API) ──────────────────────────────
+
+  const paymentDataMapped = useMemo(() => {
+    if (!intelData?.metodos_pagamento || intelData.metodos_pagamento.length === 0) return [];
+    
+    const total = intelData.metodos_pagamento.reduce((acc, curr) => acc + curr.valor_total, 0);
+    const colors = ['#10b981', '#3b82f6', '#eab308', '#a855f7', '#f97316', '#ef4444', '#06b6d4'];
+    
+    return intelData.metodos_pagamento
+      .map((p, i) => ({
+        name: p.forma || 'Outros',
+        value: total > 0 ? Number(((p.valor_total / total) * 100).toFixed(1)) : 0,
+        realValue: p.valor_total,
+        color: colors[i % colors.length],
+        comparison: 0 // Sem histórico anterior direto na API para comparar ainda
+      }))
+      .sort((a, b) => b.value - a.value);
+  }, [intelData]);
 
   // ── Sparkline & trend helpers ───────────────────────────────────────────
 
@@ -476,7 +599,6 @@ export default function Financeiro() {
   if (loading) {
     return (
       <div className="space-y-6 animate-in fade-in duration-300">
-        {/* Header skeleton */}
         <div className="space-y-2">
           <div className="h-8 w-48 bg-zinc-800 rounded-lg animate-pulse" />
           <div className="h-4 w-64 bg-zinc-800/60 rounded-lg animate-pulse" />
@@ -520,7 +642,6 @@ export default function Financeiro() {
     return (
       <div className="flex flex-col items-center justify-center min-h-[60vh] animate-in fade-in duration-500">
         <div className="relative mb-8">
-          {/* Emerald glow rings */}
           <div className="absolute inset-0 -m-4 rounded-full bg-emerald-500/5 blur-xl" />
           <div className="absolute inset-0 -m-8 rounded-full bg-emerald-500/[0.03] blur-2xl" />
           <div className="relative w-24 h-24 rounded-3xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center">
@@ -586,18 +707,15 @@ export default function Financeiro() {
 
   // ── Pie active shape for hover scale ────────────────────────────────────
 
-  const renderActiveShape = (props: Record<string, unknown>) => {
-    const { cx, cy, innerRadius, outerRadius, startAngle, endAngle, fill, payload, percent } = props as {
-      cx: number; cy: number; innerRadius: number; outerRadius: number;
-      startAngle: number; endAngle: number; fill: string; payload: { name: string }; percent: number;
-    };
+  const renderActiveShape = (props: any) => {
+    const { cx, cy, innerRadius, outerRadius, startAngle, endAngle, fill } = props;
     return (
       <g>
-        <Cell
+        <Sector
           cx={cx}
           cy={cy}
           innerRadius={innerRadius}
-          outerRadius={(outerRadius as number) + 8}
+          outerRadius={outerRadius + 8} // Aqui que a mágica acontece (aumenta o raio)
           startAngle={startAngle}
           endAngle={endAngle}
           fill={fill}
@@ -611,31 +729,88 @@ export default function Financeiro() {
   // ── Render ──────────────────────────────────────────────────────────────
 
   return (
-    <div className="space-y-6 animate-in fade-in duration-500">
-      {/* ── Header ──────────────────────────────────────────────────────── */}
-      <div className="bg-gradient-to-br from-zinc-900/80 to-zinc-900/40 border border-zinc-800/60 rounded-2xl p-5 md:p-6">
+    <div className="space-y-6 animate-in fade-in duration-500 pb-10">
+      
+      {/* ── Header & Filtro de Data Global ──────────────────────────────── */}
+      <div className="relative bg-gradient-to-br from-zinc-900/80 to-zinc-900/40 border border-zinc-800/60 rounded-2xl p-5 md:p-6 flex flex-col lg:flex-row lg:items-center justify-between gap-5">
         <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
           <div className="flex items-start gap-3.5">
             <div className="p-2.5 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex-shrink-0 mt-0.5">
               <Wallet className="w-5 h-5 md:w-6 md:h-6 text-emerald-400" />
             </div>
             <div>
-              <div className="flex items-center gap-3">
-                <h1 className="text-2xl font-bold text-white">Fluxo de Caixa</h1>
+              <div className="flex items-center gap-3 flex-wrap">
+                <h1 className="text-2xl font-bold text-white">Fluxo de Caixa & Inteligência</h1>
                 <span className="inline-flex items-center gap-1.5 bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-[10px] md:text-xs font-bold uppercase tracking-wider px-2.5 py-1 rounded-full">
                   <Lock className="w-3 h-3" />
                   Acesso Restrito
                 </span>
               </div>
               <p className="text-zinc-400 text-sm mt-1">
-                O coração financeiro da sua oficina.
+                Monitore o que dá lucro. Informação é poder.
               </p>
             </div>
           </div>
         </div>
+
+        {/* Filtro de API de Datas */}
+        <div className="flex flex-col sm:flex-row items-center gap-3 bg-zinc-950/50 p-2.5 rounded-xl border border-zinc-800/60 w-full lg:w-auto shrink-0">
+          <div className="flex items-center gap-2">
+            <Calendar className="w-4 h-4 text-zinc-500" />
+            <input 
+              type="date" 
+              value={dataInicial} 
+              onChange={(e) => setDataInicial(e.target.value)}
+              className="bg-transparent text-zinc-300 text-sm outline-none cursor-pointer"
+            />
+          </div>
+          <span className="text-zinc-600 hidden sm:inline">até</span>
+          <div className="flex items-center gap-2">
+            <input 
+              type="date" 
+              value={dataFinal} 
+              onChange={(e) => setDataFinal(e.target.value)}
+              className="bg-transparent text-zinc-300 text-sm outline-none cursor-pointer"
+            />
+          </div>
+        </div>
       </div>
 
-      {/* ── KPI Cards ───────────────────────────────────────────────────── */}
+      {/* ── KPIs Extras de Inteligência (Top Bar) ────────────────────────── */}
+      {intelData && (
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4">
+          <div className="bg-zinc-900/50 border border-zinc-800/60 rounded-xl p-4 flex items-center justify-between">
+            <div>
+              <p className="text-zinc-400 text-[10px] font-bold uppercase">Taxa de Conversão</p>
+              <p className="text-white font-bold text-xl">{intelData.taxa_conversao_orcamentos || 0}%</p>
+            </div>
+            <div className="w-8 h-8 rounded-lg bg-orange-500/10 flex items-center justify-center border border-orange-500/20"><PieChartIcon className="w-4 h-4 text-orange-400"/></div>
+          </div>
+          <div className="bg-zinc-900/50 border border-zinc-800/60 rounded-xl p-4 flex items-center justify-between">
+            <div>
+              <p className="text-zinc-400 text-[10px] font-bold uppercase">Lead Time (Médio)</p>
+              <p className="text-white font-bold text-xl">{intelData.lead_time_medio_horas || 0}h</p>
+            </div>
+            <div className="w-8 h-8 rounded-lg bg-blue-500/10 flex items-center justify-center border border-blue-500/20"><Clock className="w-4 h-4 text-blue-400"/></div>
+          </div>
+          <div className="bg-zinc-900/50 border border-zinc-800/60 rounded-xl p-4 flex items-center justify-between">
+            <div>
+              <p className="text-zinc-400 text-[10px] font-bold uppercase">Origem: Peças</p>
+              <p className="text-white font-bold text-lg tabular-nums">{formatCurrency(intelData.origem_faturamento?.pecas)}</p>
+            </div>
+            <div className="w-8 h-8 rounded-lg bg-emerald-500/10 flex items-center justify-center border border-emerald-500/20"><Package className="w-4 h-4 text-emerald-400"/></div>
+          </div>
+          <div className="bg-zinc-900/50 border border-zinc-800/60 rounded-xl p-4 flex items-center justify-between">
+            <div>
+              <p className="text-zinc-400 text-[10px] font-bold uppercase">Origem: Mão de Obra</p>
+              <p className="text-white font-bold text-lg tabular-nums">{formatCurrency(intelData.origem_faturamento?.mao_obra)}</p>
+            </div>
+            <div className="w-8 h-8 rounded-lg bg-purple-500/10 flex items-center justify-center border border-purple-500/20"><Wrench className="w-4 h-4 text-purple-400"/></div>
+          </div>
+        </div>
+      )}
+
+      {/* ── KPI Cards Principais ─────────────────────────────────────────── */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4">
         {kpiCards.map((card) => {
           const sparkData = getSparkData(card.sparkKey);
@@ -645,9 +820,7 @@ export default function Financeiro() {
               key={card.label}
               className={`relative bg-zinc-900/50 border rounded-xl p-4 md:p-5 overflow-hidden card-hover group ${card.borderColor}`}
             >
-              {/* Gradient background overlay */}
               <div className={`absolute inset-0 bg-gradient-to-br from-transparent ${card.gradientClass} to-transparent pointer-events-none`} />
-              {/* Dynamic top accent line */}
               <div className={`absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent ${card.accentColor} to-transparent`} />
 
               <div className="relative z-10">
@@ -669,7 +842,6 @@ export default function Financeiro() {
                 </div>
               </div>
 
-              {/* SVG Sparkline */}
               <div className="absolute bottom-2 right-2 opacity-40 group-hover:opacity-70 transition-opacity duration-300">
                 <Sparkline data={sparkData} color={card.sparkColor} />
               </div>
@@ -712,34 +884,34 @@ export default function Financeiro() {
         </div>
       </div>
 
-      {/* ── Competência Filter ─────────────────────────────────────────── */}
+      {/* ── Competência Filter (Visualização dos Gráficos) ─────────────── */}
       <div className="bg-zinc-900/50 border border-zinc-800/60 rounded-xl p-3">
-        <div className="flex items-center gap-3 flex-wrap">
-          <div className="flex items-center gap-1.5">
-            <Calendar className="w-4 h-4 text-zinc-500" />
-            <span className="text-xs font-semibold uppercase tracking-wider text-zinc-500">Período</span>
-          </div>
-          <div className="flex items-center gap-2 flex-wrap">
-            {([
-              { key: '6meses' as FilterOption, label: 'Últimos 6 meses' },
-              { key: 'esteMes' as FilterOption, label: 'Este Mês' },
-              { key: 'mesPassado' as FilterOption, label: 'Mês Passado' },
-            ]).map((opt) => (
-              <button
-                key={opt.key}
-                onClick={() => setFilter(opt.key)}
-                className={`inline-flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-semibold uppercase tracking-wider transition-all duration-200 border ${
-                  filter === opt.key
-                    ? 'bg-emerald-600/20 border-emerald-500/40 text-emerald-400'
-                    : 'bg-zinc-900/50 border-zinc-800 text-zinc-500 hover:text-zinc-300 hover:border-zinc-700'
-                }`}
-              >
-                {filter === opt.key && (
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
-                )}
-                {opt.label}
-              </button>
-            ))}
+        <div className="flex items-center justify-between flex-wrap gap-3">
+          <div className="flex items-center gap-3 flex-wrap">
+            <div className="flex items-center gap-1.5">
+              <BarChart3 className="w-4 h-4 text-zinc-500" />
+              <span className="text-xs font-semibold uppercase tracking-wider text-zinc-500">Visualizar no Gráfico:</span>
+            </div>
+            <div className="flex items-center gap-2 flex-wrap">
+              {([
+                { key: '6meses' as FilterOption, label: 'Histórico Completo' },
+                { key: 'esteMes' as FilterOption, label: 'Este Mês' },
+                { key: 'mesPassado' as FilterOption, label: 'Mês Passado' },
+              ]).map((opt) => (
+                <button
+                  key={opt.key}
+                  onClick={() => setFilter(opt.key)}
+                  className={`inline-flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-semibold uppercase tracking-wider transition-all duration-200 border ${
+                    filter === opt.key
+                      ? 'bg-emerald-600/20 border-emerald-500/40 text-emerald-400'
+                      : 'bg-zinc-900/50 border-zinc-800 text-zinc-500 hover:text-zinc-300 hover:border-zinc-700'
+                  }`}
+                >
+                  {filter === opt.key && <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />}
+                  {opt.label}
+                </button>
+              ))}
+            </div>
           </div>
         </div>
       </div>
@@ -751,7 +923,6 @@ export default function Financeiro() {
           DRE Simplificado
         </h3>
 
-        {/* DRE Table Rows */}
         <div className="rounded-lg border border-zinc-800 overflow-hidden">
           {dreRows.map((row, i) => (
             <div
@@ -778,7 +949,6 @@ export default function Financeiro() {
             </div>
           ))}
 
-          {/* Margin Row with progress bar */}
           <div className="border-t border-zinc-800 px-4 md:px-5 py-4 bg-zinc-900/40">
             <div className="flex items-center justify-between mb-2.5">
               <span className="text-xs font-semibold uppercase tracking-wider text-zinc-500">
@@ -830,22 +1000,8 @@ export default function Financeiro() {
                 <ResponsiveContainer width="100%" height={280}>
                   <BarChart data={chartData} barGap={4} barCategoryGap="20%">
                     <CartesianGrid strokeDasharray="3 3" stroke="#27272a" strokeOpacity={0.5} vertical={false} />
-                    <XAxis
-                      dataKey="name"
-                      tick={{ fill: '#71717a', fontSize: 11 }}
-                      axisLine={{ stroke: '#27272a' }}
-                      tickLine={false}
-                    />
-                    <YAxis
-                      tick={{ fill: '#71717a', fontSize: 11 }}
-                      axisLine={{ stroke: '#27272a' }}
-                      tickLine={false}
-                      tickFormatter={(v: number) => {
-                        if (v >= 1000) return `${(v / 1000).toFixed(0)}k`;
-                        return v.toString();
-                      }}
-                      width={50}
-                    />
+                    <XAxis dataKey="name" tick={{ fill: '#71717a', fontSize: 11 }} axisLine={{ stroke: '#27272a' }} tickLine={false} />
+                    <YAxis tick={{ fill: '#71717a', fontSize: 11 }} axisLine={{ stroke: '#27272a' }} tickLine={false} tickFormatter={(v: number) => v >= 1000 ? `${(v / 1000).toFixed(0)}k` : v.toString()} width={50} />
                     <Tooltip content={<CurrencyTooltip />} />
                     <Bar dataKey="Faturamento" fill="#10b981" radius={[6, 6, 0, 0]} maxBarSize={40} />
                     <Bar dataKey="Lucro" fill="#3b82f6" radius={[6, 6, 0, 0]} maxBarSize={40} />
@@ -879,30 +1035,10 @@ export default function Financeiro() {
                       </linearGradient>
                     </defs>
                     <CartesianGrid strokeDasharray="3 3" stroke="#27272a" strokeOpacity={0.5} vertical={false} />
-                    <XAxis
-                      dataKey="name"
-                      tick={{ fill: '#71717a', fontSize: 11 }}
-                      axisLine={{ stroke: '#27272a' }}
-                      tickLine={false}
-                    />
-                    <YAxis
-                      tick={{ fill: '#71717a', fontSize: 11 }}
-                      axisLine={{ stroke: '#27272a' }}
-                      tickLine={false}
-                      tickFormatter={(v: number) => {
-                        if (v >= 1000) return `${(v / 1000).toFixed(0)}k`;
-                        return v.toString();
-                      }}
-                      width={50}
-                    />
+                    <XAxis dataKey="name" tick={{ fill: '#71717a', fontSize: 11 }} axisLine={{ stroke: '#27272a' }} tickLine={false} />
+                    <YAxis tick={{ fill: '#71717a', fontSize: 11 }} axisLine={{ stroke: '#27272a' }} tickLine={false} tickFormatter={(v: number) => v >= 1000 ? `${(v / 1000).toFixed(0)}k` : v.toString()} width={50} />
                     <Tooltip content={<CurrencyTooltip />} />
-                    <Area
-                      type="monotone"
-                      dataKey="Lucro"
-                      stroke="#10b981"
-                      strokeWidth={2.5}
-                      fill="url(#lucroGradient)"
-                    />
+                    <Area type="monotone" dataKey="Lucro" stroke="#10b981" strokeWidth={2.5} fill="url(#lucroGradient)" />
                   </AreaChart>
                 </ResponsiveContainer>
               )}
@@ -916,126 +1052,160 @@ export default function Financeiro() {
         <div className="flex items-center justify-between px-5 py-3.5 border-b border-zinc-800/50">
           <h3 className="text-sm font-bold text-white flex items-center gap-2">
             <Wallet className="w-4 h-4 text-yellow-400" />
-            Formas de Pagamento
+            Formas de Pagamento Realizadas
           </h3>
         </div>
         <div className="p-5">
-          <div className="flex flex-col md:flex-row items-center gap-6">
-            {/* Pie chart with center label */}
-            <div className="relative w-full md:w-1/2">
-              <ResponsiveContainer width="100%" height={240}>
-                <PieChart>
-                  <Pie
-                    data={PAYMENT_DATA}
-                    cx="50%"
-                    cy="50%"
-                    innerRadius={55}
-                    outerRadius={90}
-                    paddingAngle={4}
-                    dataKey="value"
-                    stroke="none"
-                    label={renderPieLabel}
-                    labelLine={false}
-                    activeIndex={activePieIndex ?? undefined}
-                    activeShape={renderActiveShape}
-                    onMouseEnter={(_, index) => {
-                      setActivePieIndex(index);
-                      setHoveredSlice(PAYMENT_DATA[index].name);
+          {paymentDataMapped.length === 0 ? (
+            <div className="py-12 text-center text-zinc-500 text-sm">Nenhum pagamento registrado no período.</div>
+          ) : (
+            <div className="flex flex-col md:flex-row items-center gap-6">
+              {/* Pie chart with center label */}
+              <div className="relative w-full md:w-1/2">
+                <ResponsiveContainer width="100%" height={240}>
+                  <PieChart>
+                    <Pie
+                      data={paymentDataMapped}
+                      cx="50%"
+                      cy="50%"
+                      innerRadius={55}
+                      outerRadius={90}
+                      paddingAngle={4}
+                      dataKey="value"
+                      stroke="none"
+                      label={renderPieLabel}
+                      labelLine={false}
+                      activeIndex={activePieIndex ?? undefined}
+                      activeShape={renderActiveShape}
+                      onMouseEnter={(_, index) => {
+                        setActivePieIndex(index);
+                        setHoveredSlice(paymentDataMapped[index].name);
+                      }}
+                      onMouseLeave={() => {
+                        setActivePieIndex(null);
+                        setHoveredSlice(null);
+                      }}
+                    >
+                      {paymentDataMapped.map((entry, index) => (
+                        <Cell
+                          key={`cell-${index}`}
+                          fill={entry.color}
+                          opacity={hoveredSlice && hoveredSlice !== entry.name ? 0.3 : 1}
+                          style={{ transition: 'opacity 0.2s ease' }}
+                        />
+                      ))}
+                    </Pie>
+                    <Tooltip
+                      formatter={(value: number, name: string) => [`${value}%`, name]}
+                      {...tooltipStyle}
+                    />
+                  </PieChart>
+                </ResponsiveContainer>
+                {/* Center label overlay */}
+                <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-center pointer-events-none">
+                  <p className="text-lg font-bold text-white tabular-nums">100%</p>
+                  <p className="text-[10px] text-zinc-500 font-semibold uppercase tracking-wider">Total</p>
+                </div>
+              </div>
+
+              {/* Legend — enhanced with colored left border + percentage bar */}
+              <div className="w-full md:w-1/2 space-y-2.5">
+                {paymentDataMapped.map((item) => (
+                  <div
+                    key={item.name}
+                    className={`flex items-center gap-3 p-3 rounded-lg border-l-[3px] transition-all duration-200 cursor-default ${
+                      hoveredSlice === item.name
+                        ? 'bg-zinc-800/60'
+                        : 'bg-zinc-900/40 hover:bg-zinc-800/40'
+                    }`}
+                    style={{ borderLeftColor: hoveredSlice === item.name ? item.color : `${item.color}60` }}
+                    onMouseEnter={() => {
+                      setHoveredSlice(item.name);
+                      setActivePieIndex(paymentDataMapped.findIndex((p) => p.name === item.name));
                     }}
                     onMouseLeave={() => {
-                      setActivePieIndex(null);
                       setHoveredSlice(null);
+                      setActivePieIndex(null);
                     }}
                   >
-                    {PAYMENT_DATA.map((entry, index) => (
-                      <Cell
-                        key={`cell-${index}`}
-                        fill={entry.color}
-                        opacity={hoveredSlice && hoveredSlice !== entry.name ? 0.3 : 1}
-                        style={{ transition: 'opacity 0.2s ease' }}
-                      />
-                    ))}
-                  </Pie>
-                  <Tooltip
-                    formatter={(value: number, name: string) => [`${value}%`, name]}
-                    {...tooltipStyle}
-                  />
-                </PieChart>
-              </ResponsiveContainer>
-              {/* Center label overlay */}
-              <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-center pointer-events-none">
-                <p className="text-lg font-bold text-white tabular-nums">100%</p>
-                <p className="text-[10px] text-zinc-500 font-semibold uppercase tracking-wider">Total</p>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center justify-between mb-1.5">
+                        <div className="flex items-center gap-2">
+                          <div
+                            className="w-2.5 h-2.5 rounded-full flex-shrink-0 transition-transform duration-200"
+                            style={{
+                              backgroundColor: item.color,
+                              transform: hoveredSlice === item.name ? 'scale(1.3)' : 'scale(1)',
+                            }}
+                          />
+                          <span className={`text-sm font-medium transition-colors duration-200 ${
+                            hoveredSlice === item.name ? 'text-white' : 'text-zinc-300'
+                          }`}>
+                            {item.name}
+                          </span>
+                        </div>
+                        <div className="text-right">
+                          <span className={`block text-sm font-bold tabular-nums transition-colors duration-200 ${
+                            hoveredSlice === item.name ? 'text-white' : 'text-white/80'
+                          }`}>
+                            {formatCurrency(item.realValue)}
+                          </span>
+                        </div>
+                      </div>
+                      {/* Percentage bar */}
+                      <div className="h-1.5 bg-zinc-800 rounded-full overflow-hidden">
+                        <div
+                          className="h-full rounded-full transition-all duration-500"
+                          style={{ width: `${item.value}%`, backgroundColor: item.color }}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                ))}
               </div>
             </div>
-
-            {/* Legend — enhanced with colored left border + percentage bar + comparison */}
-            <div className="w-full md:w-1/2 space-y-2.5">
-              {PAYMENT_DATA.map((item) => (
-                <div
-                  key={item.name}
-                  className={`flex items-center gap-3 p-3 rounded-lg border-l-[3px] transition-all duration-200 cursor-default ${
-                    hoveredSlice === item.name
-                      ? 'bg-zinc-800/60'
-                      : 'bg-zinc-900/40 hover:bg-zinc-800/40'
-                  }`}
-                  style={{ borderLeftColor: hoveredSlice === item.name ? item.color : `${item.color}60` }}
-                  onMouseEnter={() => {
-                    setHoveredSlice(item.name);
-                    setActivePieIndex(PAYMENT_DATA.findIndex((p) => p.name === item.name));
-                  }}
-                  onMouseLeave={() => {
-                    setHoveredSlice(null);
-                    setActivePieIndex(null);
-                  }}
-                >
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center justify-between mb-1.5">
-                      <div className="flex items-center gap-2">
-                        <div
-                          className="w-2.5 h-2.5 rounded-full flex-shrink-0 transition-transform duration-200"
-                          style={{
-                            backgroundColor: item.color,
-                            transform: hoveredSlice === item.name ? 'scale(1.3)' : 'scale(1)',
-                          }}
-                        />
-                        <span className={`text-sm font-medium transition-colors duration-200 ${
-                          hoveredSlice === item.name ? 'text-white' : 'text-zinc-300'
-                        }`}>
-                          {item.name}
-                        </span>
-                      </div>
-                      <span className={`text-sm font-bold tabular-nums transition-colors duration-200 ${
-                        hoveredSlice === item.name ? 'text-white' : 'text-white/80'
-                      }`}>
-                        {item.value}%
-                      </span>
-                    </div>
-                    {/* Percentage bar */}
-                    <div className="h-1.5 bg-zinc-800 rounded-full overflow-hidden mb-1.5">
-                      <div
-                        className="h-full rounded-full transition-all duration-500"
-                        style={{ width: `${item.value}%`, backgroundColor: item.color }}
-                      />
-                    </div>
-                    {/* Comparison indicator */}
-                    <span className={`text-[10px] font-semibold ${item.comparison >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-                      {item.comparison >= 0 ? '↑' : '↓'} {Math.abs(item.comparison)}% vs mês anterior
-                    </span>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-
+          )}
           <div className="mt-4 pt-4 border-t border-zinc-800/50">
             <p className="text-zinc-500 text-xs flex items-center gap-1.5">
               <Info className="w-3.5 h-3.5 flex-shrink-0" />
-              Dados baseados nas formas de pagamento registradas nas OS
+              Dados puxados diretamente das formas de pagamento preenchidas na API (período selecionado no topo).
             </p>
           </div>
         </div>
       </div>
+
+      {/* ── Rankings de Inteligência (Novo Bloco) ───────────────────────── */}
+      {intelData && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 pt-4">
+          <RankingList 
+            title="Top 10 Clientes em rentabilidade" 
+            icon={Users} 
+            items={intelData.top_10_clientes} 
+            type="clientes" 
+          />
+          
+          <RankingList 
+            title="Piores 10 Clientes em rentabilidade" 
+            icon={TrendingDown} 
+            items={intelData.piores_10_clientes} 
+            type="clientes" 
+          />
+
+          <RankingList 
+            title="Produtividade Bruta (Mecânicos)" 
+            icon={Wrench} 
+            items={intelData.produtividade_mecanicos} 
+            type="mecanicos" 
+          />
+
+          <RankingList 
+            title="Rentabilidade por Marca (Top 10)" 
+            icon={Car} 
+            items={intelData.rentabilidade_marcas?.slice(0, 10)} 
+            type="marcas" 
+          />
+        </div>
+      )}
     </div>
   );
 }

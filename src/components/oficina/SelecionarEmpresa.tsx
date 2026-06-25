@@ -1,164 +1,158 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Building2, Search, ArrowRight, LogOut, RefreshCw, CheckCircle2, MapPin, Hash } from 'lucide-react';
+import { Building2, CheckCircle2, ChevronRight, Loader2, AlertTriangle, Briefcase } from 'lucide-react';
 import { apiGet } from '@/lib/api';
-import { useMasterStore, EmpresaResumida } from '@/stores/master';
-import { useAppStore } from '@/stores/app';
 import { useAuthStore } from '@/stores/auth';
+import { useAppStore } from '@/stores/app';
+import { toast } from 'sonner';
+
+// ─── Types ───────────────────────────────────────────────────────────────────
+
+interface Empresa {
+  id: string;
+  nome_fantasia: string;
+  razao_social: string;
+  cnpj: string;
+}
+
+// ─── Component ───────────────────────────────────────────────────────────────
 
 export default function SelecionarEmpresa() {
-  const [empresas, setEmpresas] = useState<EmpresaResumida[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [busca, setBusca] = useState('');
-  const [selecionando, setSelecionando] = useState<string | null>(null);
-
-  const setEmpresaSelecionada = useMasterStore((s) => s.setEmpresaSelecionada);
-  const navigate = useAppStore((s) => s.navigate);
-  const logout = useAuthStore((s) => s.logout);
   const user = useAuthStore((s) => s.user);
+  const setUser = useAuthStore((s) => s.setUser);
+  const navigate = useAppStore((s) => s.navigate);
+
+  const [empresas, setEmpresas] = useState<Empresa[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
 
   useEffect(() => {
-    carregarEmpresas();
+    const fetchEmpresas = async () => {
+      setLoading(true);
+      try {
+        // IMPORTANTE: Ajuste a rota '/empresas' conforme o seu backend. 
+        // Se a sua API usa algo como '/usuarios/empresas', altere aqui.
+        const data = await apiGet<Empresa[]>('/empresas');
+        setEmpresas(Array.isArray(data) ? data : []);
+      } catch (err) {
+        setError('O estado falhou em fornecer a lista. Erro de comunicação com o servidor.');
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchEmpresas();
   }, []);
 
-  async function carregarEmpresas() {
-    setLoading(true);
-    try {
-      const data = await apiGet<EmpresaResumida[]>('/empresas');
-      setEmpresas(data);
-    } catch {
-      setEmpresas([]);
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  async function entrarNaEmpresa(empresa: EmpresaResumida) {
-    setSelecionando(empresa.id);
-    setEmpresaSelecionada(empresa);
-    // Pequeno delay para feedback visual
-    await new Promise((r) => setTimeout(r, 400));
+  const handleSelect = (empresa: Empresa) => {
+    if (!user) return;
+    
+    // A MÁGICA ACONTECE AQUI: Atualiza o estado global na marra
+    // Isso avisa todas as outras telas (Estoque, Financeiro, etc) que o ID mudou.
+    setUser({ ...user, empresa_id: empresa.id });
+    
+    // Puxa o nome real que veio do banco, sem campos nulos fantasiados
+    const nomeExibicao = empresa.nome_fantasia || empresa.razao_social || 'Operação';
+    toast.success(`Acessando: ${nomeExibicao}`);
+    
+    // Redireciona pro dashboard pra forçar a re-renderização das rotas
     navigate('dashboard');
+  };
+
+  // ─── Render: Loading ───────────────────────────────────────────────────────
+  if (loading) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[60vh] animate-in fade-in duration-500">
+        <Loader2 className="w-10 h-10 text-emerald-500 animate-spin mb-4" />
+        <p className="text-zinc-400 font-medium">Mapeando suas operações...</p>
+      </div>
+    );
   }
 
-    const empresasFiltradas = empresas.filter((e) => {
-    const nome = e.nome ?? '';
-    const cnpj = e.cnpj ?? '';
-    const cidade = e.cidade ?? '';
-    const q = busca.toLowerCase();
+  // ─── Render: Error ─────────────────────────────────────────────────────────
+  if (error) {
     return (
-        nome.toLowerCase().includes(q) ||
-        cnpj.includes(busca) ||
-        cidade.toLowerCase().includes(q)
+      <div className="flex flex-col items-center justify-center min-h-[60vh] animate-in fade-in duration-500">
+        <div className="w-16 h-16 rounded-2xl bg-red-500/10 border border-red-500/20 flex items-center justify-center mb-4">
+          <AlertTriangle className="w-8 h-8 text-red-400" />
+        </div>
+        <p className="text-white font-bold text-lg mb-2">Erro na busca</p>
+        <p className="text-zinc-500 text-sm max-w-sm text-center">{error}</p>
+      </div>
     );
-    });
+  }
 
+  // ─── Render: Main ──────────────────────────────────────────────────────────
   return (
-    <div className="min-h-screen bg-zinc-950 flex flex-col items-center justify-center p-4">
-      {/* Header */}
-      <div className="w-full max-w-3xl mb-8">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="p-2 rounded-xl bg-emerald-500/10 border border-emerald-500/20">
-              <Building2 className="w-6 h-6 text-emerald-400" />
-            </div>
-            <div>
-              <h1 className="text-white font-bold text-xl">Selecionar Empresa</h1>
-              <p className="text-zinc-500 text-sm">
-                Olá, <span className="text-emerald-400">{user?.nome}</span> — escolha uma empresa para acessar
-              </p>
-            </div>
-          </div>
-          <button
-            onClick={logout}
-            className="flex items-center gap-2 text-zinc-500 hover:text-red-400 text-sm transition-colors px-3 py-2 rounded-lg hover:bg-red-500/10"
-          >
-            <LogOut className="w-4 h-4" />
-            Sair
-          </button>
+    <div className="max-w-4xl mx-auto space-y-6 animate-in fade-in duration-500 pb-10 mt-6 md:mt-10 px-4">
+      <div className="text-center space-y-2 mb-10">
+        <div className="w-16 h-16 rounded-full bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center mx-auto mb-4 shadow-lg shadow-emerald-500/5">
+          <Briefcase className="w-8 h-8 text-emerald-400" />
         </div>
+        <h1 className="text-2xl md:text-3xl font-black text-white tracking-tight">Selecione a Operação</h1>
+        <p className="text-zinc-400 text-sm">Escolha qual CNPJ ou filial você vai administrar agora.</p>
       </div>
 
-      {/* Busca */}
-      <div className="w-full max-w-3xl mb-4">
-        <div className="relative">
-          <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500" />
-          <input
-            type="text"
-            placeholder="Buscar por nome, CNPJ ou cidade..."
-            value={busca}
-            onChange={(e) => setBusca(e.target.value)}
-            className="w-full rounded-xl border border-zinc-800 bg-zinc-900/80 p-3.5 pl-10 text-sm text-white placeholder-zinc-600 outline-none focus:border-emerald-500/50 focus:ring-2 focus:ring-emerald-500/10 transition-all"
-          />
-        </div>
-      </div>
-
-      {/* Lista de empresas */}
-      <div className="w-full max-w-3xl">
-        {loading ? (
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            {[...Array(6)].map((_, i) => (
-              <div key={i} className="h-24 rounded-xl bg-zinc-900/50 border border-zinc-800 animate-pulse" />
-            ))}
-          </div>
-        ) : empresasFiltradas.length === 0 ? (
-          <div className="text-center py-16 text-zinc-500">
-            <Building2 className="w-10 h-10 mx-auto mb-3 opacity-30" />
-            <p className="font-medium">Nenhuma empresa encontrada</p>
-            <button onClick={carregarEmpresas} className="mt-4 flex items-center gap-2 mx-auto text-emerald-400 text-sm hover:underline">
-              <RefreshCw className="w-3.5 h-3.5" /> Recarregar
-            </button>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        {empresas.length === 0 ? (
+          <div className="col-span-full text-center py-12 bg-zinc-900/50 border border-zinc-800/60 rounded-2xl">
+            <Building2 className="w-12 h-12 text-zinc-700 mx-auto mb-4" />
+            <p className="text-white font-bold text-lg mb-1">Nenhuma empresa encontrada</p>
+            <p className="text-zinc-500 text-sm">Você ainda não possui empresas vinculadas ao seu usuário.</p>
           </div>
         ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            {empresasFiltradas.map((empresa) => (
+          empresas.map((empresa) => {
+            const isSelected = user?.empresa_id === empresa.id;
+            const nomeExibicao = empresa.nome_fantasia || empresa.razao_social || 'Unidade Sem Nome';
+
+            return (
               <button
                 key={empresa.id}
-                onClick={() => entrarNaEmpresa(empresa)}
-                disabled={!!selecionando}
-                className="group relative text-left p-4 rounded-xl border border-zinc-800 bg-zinc-900/50 hover:border-emerald-500/30 hover:bg-zinc-900 transition-all duration-200 disabled:opacity-50"
+                onClick={() => handleSelect(empresa)}
+                className={`group relative text-left p-6 rounded-2xl transition-all duration-300 overflow-hidden outline-none ${
+                  isSelected
+                    ? 'bg-emerald-500/5 border-2 border-emerald-500/50 shadow-[0_0_30px_rgba(16,185,129,0.1)] -translate-y-1'
+                    : 'bg-zinc-900/40 border-2 border-zinc-800/60 hover:border-emerald-500/30 hover:bg-zinc-800/50 hover:-translate-y-1'
+                }`}
               >
-                {/* Status dot */}
-                <div className={`absolute top-4 right-4 w-2 h-2 rounded-full ${empresa.ativo ? 'bg-emerald-500' : 'bg-zinc-600'}`} />
-
-                <div className="flex items-start gap-3">
-                  <div className="p-2 rounded-lg bg-zinc-800 group-hover:bg-emerald-500/10 group-hover:border-emerald-500/20 border border-transparent transition-all">
-                    <Building2 className="w-4 h-4 text-zinc-400 group-hover:text-emerald-400 transition-colors" />
+                {isSelected && (
+                  <div className="absolute top-0 right-0 bg-emerald-500 text-zinc-950 text-[10px] font-bold px-3 py-1 rounded-bl-xl z-10 uppercase tracking-wider">
+                    Em Uso
                   </div>
-                  <div className="flex-1 min-w-0 pr-4">
-                    <p className="text-white font-semibold text-sm truncate">{empresa.nome}</p>
-                    <div className="flex flex-wrap gap-x-3 gap-y-1 mt-1.5">
+                )}
+                
+                <div className="flex items-start justify-between gap-4">
+                  <div className="flex-1 min-w-0 space-y-2.5">
+                    <h3 className={`text-lg font-bold truncate transition-colors ${isSelected ? 'text-emerald-400' : 'text-zinc-100 group-hover:text-white'}`}>
+                      {nomeExibicao}
+                    </h3>
+                    
+                    <div className="space-y-1.5">
                       {empresa.cnpj && (
-                        <span className="flex items-center gap-1 text-zinc-500 text-xs">
-                          <Hash className="w-3 h-3" /> {empresa.cnpj}
-                        </span>
+                        <p className="inline-flex items-center px-2 py-0.5 rounded bg-zinc-950/80 border border-zinc-800 text-zinc-400 text-xs font-mono">
+                          {empresa.cnpj}
+                        </p>
                       )}
-                      {empresa.cidade && (
-                        <span className="flex items-center gap-1 text-zinc-500 text-xs">
-                          <MapPin className="w-3 h-3" /> {empresa.cidade}
-                        </span>
+                      {empresa.razao_social && empresa.nome_fantasia && (
+                        <p className="text-zinc-500 text-[10px] uppercase tracking-wider truncate mt-1">
+                          {empresa.razao_social}
+                        </p>
                       )}
                     </div>
                   </div>
-                </div>
 
-                {/* Loading/confirm state */}
-                <div className="absolute inset-0 rounded-xl flex items-center justify-center bg-emerald-500/5 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
-                  {selecionando === empresa.id ? (
-                    <CheckCircle2 className="w-5 h-5 text-emerald-400 animate-bounce" />
-                  ) : (
-                    <ArrowRight className="w-4 h-4 text-emerald-400/50" />
-                  )}
+                  <div className={`w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 transition-all duration-300 ${
+                    isSelected 
+                      ? 'bg-emerald-500 text-zinc-950 shadow-lg shadow-emerald-500/30 scale-110' 
+                      : 'bg-zinc-800/50 text-zinc-500 group-hover:bg-emerald-500/20 group-hover:text-emerald-400 border border-zinc-700/50 group-hover:border-emerald-500/30'
+                  }`}>
+                    {isSelected ? <CheckCircle2 className="w-5 h-5" /> : <ChevronRight className="w-5 h-5 ml-0.5" />}
+                  </div>
                 </div>
               </button>
-            ))}
-          </div>
+            );
+          })
         )}
-
-        <p className="text-center text-zinc-700 text-xs mt-6">
-          {empresas.length} empresa{empresas.length !== 1 ? 's' : ''} cadastrada{empresas.length !== 1 ? 's' : ''}
-        </p>
       </div>
     </div>
   );

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import {
   Building2,
   Users,
@@ -8,6 +8,7 @@ import {
   Lock,
   Save,
   Upload,
+  UploadCloud,
   Plus,
   Pencil,
   Trash2,
@@ -24,6 +25,7 @@ import {
   MapPin,
   Phone,
   User,
+  Image as ImageIcon,
 } from 'lucide-react';
 import { apiGet, apiPost, apiPut, apiDelete } from '@/lib/api';
 import { useAuthStore } from '@/stores/auth';
@@ -123,7 +125,27 @@ const RBAC_INFO = [
   },
 ];
 
-/* ───────────────────── Skeleton ───────────────────── */
+// MASCARAS CNPJ E TELEFONE
+
+function maskCNPJ(value: string): string {
+  const digits = value.replace(/\D/g, '').slice(0, 14);
+  if (digits.length <= 2) return digits;
+  if (digits.length <= 5) return `${digits.slice(0, 2)}.${digits.slice(2)}`;
+  if (digits.length <= 8) return `${digits.slice(0, 2)}.${digits.slice(2, 5)}.${digits.slice(5)}`;
+  if (digits.length <= 12) return `${digits.slice(0, 2)}.${digits.slice(2, 5)}.${digits.slice(5, 8)}/${digits.slice(8)}`;
+  return `${digits.slice(0, 2)}.${digits.slice(2, 5)}.${digits.slice(5, 8)}/${digits.slice(8, 12)}-${digits.slice(12)}`;
+}
+
+function maskPhone(value: string): string {
+  const digits = value.replace(/\D/g, '').slice(0, 11);
+  if (digits.length <= 2) return digits;
+  if (digits.length <= 6) return `(${digits.slice(0, 2)}) ${digits.slice(2)}`;
+  if (digits.length <= 10) return `(${digits.slice(0, 2)}) ${digits.slice(2, 6)}-${digits.slice(6)}`;
+  return `(${digits.slice(0, 2)}) ${digits.slice(2, 7)}-${digits.slice(7)}`;
+}
+
+
+/* ───────────────────── Skeletons ───────────────────── */
 
 function ConfigSkeleton() {
   return (
@@ -499,17 +521,41 @@ export default function Configuracoes() {
   const [userSaving, setUserSaving] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
-  /* Toast (using sonner) */
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // RBAC - Quem é Dono ou Master, manda.
+  const canEditCompany = ['master', 'DONO'].includes(user?.cargo || '');
+
+  /* ──────── MÁSCARAS ──────── */
+  const cleanDocument = (v: string) => v.replace(/\D/g, '');
+  const cleanPhoneStr = (v: string) => v.replace(/\D/g, '');
 
   /* ──────── Load company data ──────── */
   const loadEmpresa = useCallback(async () => {
     if (!empresaId) return;
     setEmpresaLoading(true);
     try {
-      const data = await apiGet<EmpresaDetails>(`/empresas/${empresaId}/detalhes`);
-      setEmpresa(data);
+      // Puxa a lista inteira e filtra para liberar o carregamento para o MASTER
+      const res = await apiGet<any[]>('/empresas');
+      const data = res.find((e) => e.id === empresaId);
+      
+      if (data) {
+        setEmpresa({
+          id: data.id,
+          nome_fantasia: data.nome_fantasia || '',
+          razao_social: data.razao_social || '',
+          cnpj: maskCNPJ(data.cnpj || ''),
+          email: data.email || '',
+          telefone: maskPhone(data.telefone || ''),
+          endereco: data.endereco || '',
+          nome_exibicao: data.nome_exibicao || '',
+          cor_primaria: data.cor_primaria || '#10b981',
+          cor_secundaria: data.cor_secundaria || '#1f2937',
+          logo_b64: data.logo_b64 || '',
+        });
+      }
     } catch {
-      toast.error('Erro ao salvar alterações.');
+      toast.error('Erro ao buscar as informações da empresa.');
     } finally {
       setEmpresaLoading(false);
     }
@@ -523,7 +569,7 @@ export default function Configuracoes() {
       const data = await apiGet<Usuario[]>(`/usuarios/${empresaId}`);
       setUsuarios(data);
     } catch {
-      toast.error('Erro ao salvar alterações.');
+      toast.error('Erro ao listar equipe.');
     } finally {
       setUsersLoading(false);
     }
@@ -534,30 +580,30 @@ export default function Configuracoes() {
     loadUsers();
   }, [loadEmpresa, loadUsers]);
 
-  /* ──────── Save company data ──────── */
+  /* ──────── Save company data (CNPJ, Contato, Endereço) ──────── */
   const handleSaveEmpresa = async () => {
-    if (!empresa) return;
+    if (!empresa || !canEditCompany) return;
     setEmpresaSaving(true);
     try {
       await apiPut(`/empresas/${empresaId}`, {
         nome_fantasia: empresa.nome_fantasia,
         razao_social: empresa.razao_social,
-        cnpj: empresa.cnpj,
+        cnpj: cleanDocument(empresa.cnpj), // Envia sem máscara
         email: empresa.email,
-        telefone: empresa.telefone,
+        telefone: cleanPhoneStr(empresa.telefone), // Envia sem máscara
         endereco: empresa.endereco,
       });
-      toast.success('Dados da empresa atualizados!');
+      toast.success('Dados de cadastro atualizados com sucesso!');
     } catch {
-      toast.error('Erro ao salvar alterações.');
+      toast.error('Erro ao atualizar os dados da empresa.');
     } finally {
       setEmpresaSaving(false);
     }
   };
 
-  /* ──────── Save appearance config ──────── */
+  /* ──────── Save appearance config (Visual e Logo) ──────── */
   const handleSaveConfig = async () => {
-    if (!empresa) return;
+    if (!empresa || !canEditCompany) return;
     setConfigSaving(true);
     try {
       await apiPut(`/empresas/${empresaId}/configuracoes`, {
@@ -566,12 +612,29 @@ export default function Configuracoes() {
         cor_secundaria: empresa.cor_secundaria || '#1f2937',
         logo_b64: empresa.logo_b64 || '',
       });
-      toast.success('Configurações salvas!');
+      toast.success('Identidade visual e Logo atualizados!');
     } catch {
-      toast.error('Erro ao salvar alterações.');
+      toast.error('Erro ao salvar as configurações visuais.');
     } finally {
       setConfigSaving(false);
     }
+  };
+
+  /* ──────── Handle File Upload ──────── */
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (file.size > 2 * 1024 * 1024) { 
+      toast.error('A imagem excede 2MB. Otimize e tente novamente.');
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      setEmpresa((prev) => prev ? { ...prev, logo_b64: reader.result as string } : null);
+    };
+    reader.readAsDataURL(file);
   };
 
   /* ──────── User CRUD ──────── */
@@ -581,7 +644,7 @@ export default function Configuracoes() {
       setUsuarios((prev) => prev.map((x) => (x.id === u.id ? { ...x, ativo: !u.ativo } : x)));
       toast.success('Status do membro atualizado!');
     } catch {
-      toast.error('Erro ao salvar alterações.');
+      toast.error('Erro ao salvar alterações de status.');
     }
   };
 
@@ -592,7 +655,7 @@ export default function Configuracoes() {
       setUsuarios((prev) => prev.filter((x) => x.id !== userId));
       toast.success('Membro removido do sistema.');
     } catch {
-      toast.error('Erro ao salvar alterações.');
+      toast.error('Erro ao remover o membro.');
     } finally {
       setDeletingId(null);
     }
@@ -614,8 +677,7 @@ export default function Configuracoes() {
       setEditingUser(null);
       loadUsers();
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Erro ao salvar membro.';
-      toast.error('Erro ao salvar alterações.');
+      toast.error('Erro ao salvar os dados do membro.');
     } finally {
       setUserSaving(false);
     }
@@ -634,7 +696,7 @@ export default function Configuracoes() {
   const userCargoBadge = CARGO_BADGE[user?.cargo || ''] || { label: user?.cargo || '', classes: 'bg-zinc-700/10 text-zinc-400 border-zinc-700/20' };
 
   return (
-    <div className="space-y-6 animate-in fade-in duration-500">
+    <div className="space-y-6 animate-in fade-in duration-500 pb-10">
       {/* ─── Header ──────────────────────────────────────────────────────── */}
       <div className="bg-gradient-to-br from-zinc-900/80 to-zinc-900/40 border border-zinc-800/60 rounded-2xl p-5 md:p-6">
         <div className="flex items-center justify-between gap-4">
@@ -682,6 +744,7 @@ export default function Configuracoes() {
       {/* ──────── Tab: Empresa ──────── */}
       {tab === 'empresa' && empresa && (
         <div className="space-y-6">
+          
           {/* Section: Dados da Empresa */}
           <div className="bg-zinc-950/40 border border-zinc-800/50 rounded-xl p-4 md:p-5">
             <div className="flex items-center gap-2.5 mb-4 pb-3 border-b border-zinc-800/50">
@@ -706,7 +769,7 @@ export default function Configuracoes() {
               <FieldInput
                 label="CNPJ"
                 value={empresa.cnpj}
-                onChange={(v) => setEmpresa({ ...empresa, cnpj: v })}
+                onChange={(v) => setEmpresa({ ...empresa, cnpj: maskCNPJ(v) })}
                 placeholder="00.000.000/0001-00"
               />
             </div>
@@ -729,9 +792,9 @@ export default function Configuracoes() {
                 placeholder="contato@empresa.com"
               />
               <FieldInput
-                label="Telefone"
+                label="Telefone / WhatsApp"
                 value={empresa.telefone}
-                onChange={(v) => setEmpresa({ ...empresa, telefone: v })}
+                onChange={(v) => setEmpresa({ ...empresa, telefone: maskPhone(v) })}
                 placeholder="(00) 00000-0000"
               />
             </div>
@@ -753,106 +816,85 @@ export default function Configuracoes() {
             />
           </div>
 
-          {/* Section: Logo */}
-          <div className="bg-zinc-950/40 border border-zinc-800/50 rounded-xl p-4 md:p-5">
-            <div className="flex items-center gap-2.5 mb-4 pb-3 border-b border-zinc-800/50">
-              <div className="w-8 h-8 rounded-lg bg-emerald-500/10 flex items-center justify-center">
-                <Upload className="w-4 h-4 text-emerald-400" />
-              </div>
-              <h2 className="text-xs font-bold uppercase tracking-wider text-zinc-400">Logo da Empresa</h2>
-            </div>
-            <div className="border-2 border-dashed border-zinc-700/50 rounded-xl p-6 flex flex-col items-center justify-center gap-2 hover:border-zinc-600 transition-colors cursor-pointer">
-              <Upload className="w-8 h-8 text-zinc-500" />
-              <p className="text-zinc-400 text-sm">Clique ou arraste a logo aqui</p>
-              <p className="text-zinc-600 text-xs">PNG, JPG ou SVG (máx. 2MB)</p>
-            </div>
-          </div>
-
-          {/* Save Button */}
-          <div className="flex justify-end">
+          {/* Botão de salvar apenas Cadastro CNPJ */}
+          <div className="flex justify-end pt-2 pb-6 border-b border-zinc-800/50">
             <button
               onClick={handleSaveEmpresa}
               disabled={empresaSaving}
-              className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl shadow-lg shadow-emerald-600/20 py-3 px-6 text-sm transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 active:scale-[0.98]"
+              className="bg-zinc-800 hover:bg-zinc-700 text-white font-bold rounded-xl py-3 px-6 text-sm transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 active:scale-[0.98]"
             >
               {empresaSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-              Salvar Alterações
+              Salvar Dados de Cadastro
             </button>
           </div>
 
-          {/* Section: Aparência */}
+          {/* Section: Identidade Visual e Logo */}
+          <div className="bg-zinc-950/40 border border-zinc-800/50 rounded-xl p-4 md:p-5">
+            <div className="flex items-center gap-2.5 mb-4 pb-3 border-b border-zinc-800/50">
+              <div className="w-8 h-8 rounded-lg bg-emerald-500/10 flex items-center justify-center">
+                <UploadCloud className="w-4 h-4 text-emerald-400" />
+              </div>
+              <h2 className="text-xs font-bold uppercase tracking-wider text-zinc-400">Identidade Visual (Logo)</h2>
+            </div>
+            
+            <div className="flex flex-col sm:flex-row items-center gap-6">
+              <div className="w-32 h-32 rounded-xl bg-zinc-950 border border-zinc-800 flex items-center justify-center overflow-hidden flex-shrink-0 relative group">
+                {empresa.logo_b64 ? (
+                  <>
+                    <img src={empresa.logo_b64} alt="Logo" className="w-full h-full object-contain p-2" />
+                    <button onClick={() => setEmpresa({ ...empresa, logo_b64: '' })} className="absolute inset-0 bg-red-500/80 text-white font-bold opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">Remover</button>
+                  </>
+                ) : (
+                  <ImageIcon className="w-8 h-8 text-zinc-700" />
+                )}
+              </div>
+              <div className="flex-1 w-full">
+                <div onClick={() => fileInputRef.current?.click()} className="w-full border-2 border-dashed border-zinc-700 hover:border-emerald-500/50 rounded-xl p-8 text-center cursor-pointer transition-colors bg-zinc-950/30 hover:bg-emerald-500/5">
+                  <UploadCloud className="w-6 h-6 text-zinc-500 mx-auto mb-2" />
+                  <p className="text-white text-sm font-bold mb-1">Clique para fazer upload</p>
+                  <p className="text-zinc-500 text-xs">PNG, JPG ou SVG (máx. 2MB). Esta logo aparecerá na impressão da OS.</p>
+                  <input type="file" ref={fileInputRef} onChange={handleFileChange} accept="image/*" className="hidden" />
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Section: Aparência do Sistema */}
           <div className="bg-zinc-950/40 border border-zinc-800/50 rounded-xl p-4 md:p-5">
             <div className="flex items-center gap-2.5 mb-4 pb-3 border-b border-zinc-800/50">
               <div className="w-8 h-8 rounded-lg bg-emerald-500/10 flex items-center justify-center">
                 <Shield className="w-4 h-4 text-emerald-400" />
               </div>
-              <h2 className="text-xs font-bold uppercase tracking-wider text-zinc-400">Aparência</h2>
+              <h2 className="text-xs font-bold uppercase tracking-wider text-zinc-400">Personalização do Sistema</h2>
             </div>
 
-            <div className="space-y-4">
-              <FieldInput
-                label="Nome de Exibição"
-                value={empresa.nome_exibicao || ''}
-                onChange={(v) => setEmpresa({ ...empresa, nome_exibicao: v })}
-                placeholder="Nome exibido no sistema"
-              />
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-[10px] font-bold uppercase tracking-wider text-zinc-500 mb-1.5">
-                    Cor Primária
-                  </label>
-                  <div className="flex items-center gap-3">
-                    <input
-                      type="color"
-                      value={empresa.cor_primaria || '#10b981'}
-                      onChange={(e) => setEmpresa({ ...empresa, cor_primaria: e.target.value })}
-                      className="w-10 h-10 rounded-xl border border-zinc-800 bg-zinc-950 cursor-pointer p-0.5"
-                    />
-                    <input
-                      type="text"
-                      value={empresa.cor_primaria || '#10b981'}
-                      onChange={(e) => setEmpresa({ ...empresa, cor_primaria: e.target.value })}
-                      placeholder="#10b981"
-                      className="flex-1 rounded-xl border border-zinc-800 bg-zinc-950 p-3.5 text-sm text-white placeholder-zinc-600 outline-none focus:border-emerald-500/50 focus:ring-2 focus:ring-emerald-500/10 transition-all font-mono"
-                    />
-                  </div>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <FieldInput label="Nome de Exibição" value={empresa.nome_exibicao || ''} onChange={(v) => setEmpresa({ ...empresa, nome_exibicao: v })} placeholder="AutoTec Oficial" />
+              
+              <div>
+                <label className="block text-[10px] font-bold uppercase tracking-wider text-zinc-500 mb-1.5">Cor Primária</label>
+                <div className="flex items-center gap-3">
+                  <input type="color" value={empresa.cor_primaria || '#10b981'} onChange={(e) => setEmpresa({ ...empresa, cor_primaria: e.target.value })} className="w-12 h-12 rounded-xl border border-zinc-800 bg-zinc-950 cursor-pointer p-1" />
+                  <input type="text" value={empresa.cor_primaria || '#10b981'} onChange={(e) => setEmpresa({ ...empresa, cor_primaria: e.target.value })} className="flex-1 rounded-xl border border-zinc-800 bg-zinc-950 p-3.5 text-sm text-white placeholder-zinc-600 outline-none focus:border-emerald-500/50 focus:ring-2 focus:ring-emerald-500/10 font-mono" />
                 </div>
+              </div>
 
-                <div>
-                  <label className="block text-[10px] font-bold uppercase tracking-wider text-zinc-500 mb-1.5">
-                    Cor Secundária
-                  </label>
-                  <div className="flex items-center gap-3">
-                    <input
-                      type="color"
-                      value={empresa.cor_secundaria || '#1f2937'}
-                      onChange={(e) => setEmpresa({ ...empresa, cor_secundaria: e.target.value })}
-                      className="w-10 h-10 rounded-xl border border-zinc-800 bg-zinc-950 cursor-pointer p-0.5"
-                    />
-                    <input
-                      type="text"
-                      value={empresa.cor_secundaria || '#1f2937'}
-                      onChange={(e) => setEmpresa({ ...empresa, cor_secundaria: e.target.value })}
-                      placeholder="#1f2937"
-                      className="flex-1 rounded-xl border border-zinc-800 bg-zinc-950 p-3.5 text-sm text-white placeholder-zinc-600 outline-none focus:border-emerald-500/50 focus:ring-2 focus:ring-emerald-500/10 transition-all font-mono"
-                    />
-                  </div>
+              <div>
+                <label className="block text-[10px] font-bold uppercase tracking-wider text-zinc-500 mb-1.5">Cor Secundária</label>
+                <div className="flex items-center gap-3">
+                  <input type="color" value={empresa.cor_secundaria || '#1f2937'} onChange={(e) => setEmpresa({ ...empresa, cor_secundaria: e.target.value })} className="w-12 h-12 rounded-xl border border-zinc-800 bg-zinc-950 cursor-pointer p-1" />
+                  <input type="text" value={empresa.cor_secundaria || '#1f2937'} onChange={(e) => setEmpresa({ ...empresa, cor_secundaria: e.target.value })} className="flex-1 rounded-xl border border-zinc-800 bg-zinc-950 p-3.5 text-sm text-white placeholder-zinc-600 outline-none focus:border-emerald-500/50 focus:ring-2 focus:ring-emerald-500/10 font-mono" />
                 </div>
               </div>
             </div>
-
-            <div className="flex justify-end mt-5">
-              <button
-                onClick={handleSaveConfig}
-                disabled={configSaving}
-                className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl shadow-lg shadow-emerald-600/20 py-3 px-6 text-sm transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 active:scale-[0.98]"
-              >
-                {configSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-                Salvar Aparência
+            
+            <div className="flex justify-end mt-6 pt-4 border-t border-zinc-800/50">
+              <button onClick={handleSaveConfig} disabled={configSaving} className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl shadow-lg shadow-emerald-600/20 py-3 px-6 text-sm transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 active:scale-[0.98]">
+                {configSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />} Salvar Identidade Visual
               </button>
             </div>
           </div>
+
         </div>
       )}
 
@@ -1072,3 +1114,5 @@ export default function Configuracoes() {
     </div>
   );
 }
+
+

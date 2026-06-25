@@ -16,6 +16,7 @@ import {
   DollarSign,
   TrendingDown,
   X,
+  MessageCircle,
   Check,
   Clock,
   Phone,
@@ -267,6 +268,50 @@ export default function DetalhesOS() {
   const filteredEstoque = itemEstoqueSearch
     ? estoque.filter((e) => e.nome.toLowerCase().includes(itemEstoqueSearch.toLowerCase()))
     : estoque;
+
+  // GERADOR DE ORÇAMENTO PELO WHATSAPP
+  const handleWhatsAppShare = () => {
+    if (!osData) return;
+    
+    // Pega o telefone do cliente, limpa tudo que não for número
+    const phone = osData.clientes?.telefone ? osData.clientes.telefone.replace(/\D/g, '') : '';
+    const safeId = osData.id.substring(0, 8).toUpperCase();
+    const vehicle = osData.veiculos ? `${osData.veiculos.marca || ''} ${osData.veiculos.modelo || ''} - ${osData.veiculos.placa || ''}`.trim() : 'Não informado';
+    const total = formatCurrency(totalVenda);
+
+    // Monta o cabeçalho (usando os asteriscos * para o negrito no WhatsApp)
+    let text = `*ORDEM DE SERVIÇO #${safeId}*\n`;
+    if (empresaData?.nome_fantasia) text += `*Oficina:* ${empresaData.nome_fantasia}\n`;
+    text += `*Status:* ${getStatusConfig(editStatus || osData.status).label}\n`;
+    text += `*Veículo:* ${vehicle}\n\n`;
+
+    // Monta a lista de peças/mão de obra
+    if (items.length > 0) {
+      text += `*Serviços e Peças:*\n`;
+      items.forEach(i => {
+        text += `• ${i.quantidade}x ${i.nome} - ${formatCurrency(i.subtotal)}\n`;
+      });
+      text += `\n`;
+    }
+
+    if (osData.desconto && osData.desconto > 0) {
+      text += `*Desconto:* -${formatCurrency(osData.desconto)}\n`;
+    }
+
+    // O mais importante: o valor final
+    text += `*TOTAL DA OS:* ${total}\n`;
+
+if (editPagamento || osData.forma_pagamento) {
+      const pag = (editPagamento || osData.forma_pagamento) as string;
+      text += `*Pagamento:* ${pagamentoLabels[pag] || pag}\n`;
+    }
+
+    text += `\nPara visualizar o recibo completo e a garantia em PDF, solicite ao nosso atendimento.`;
+
+    // Dispara a URL oficial da API do WhatsApp Web/Mobile
+    const url = phone ? `https://wa.me/55${phone}?text=${encodeURIComponent(text)}` : `https://wa.me/?text=${encodeURIComponent(text)}`;
+    window.open(url, '_blank');
+  };  
 
   const handlePrint = useCallback(() => {
     if (!osData) {
@@ -702,6 +747,15 @@ export default function DetalhesOS() {
             >
               <Trash2 className="w-4 h-4" />
               <span className="hidden sm:inline">Excluir OS</span>
+            </button>
+
+            <button
+              onClick={handleWhatsAppShare}
+              className="inline-flex cursor-pointer items-center gap-2 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-500 font-bold py-2.5 px-4 rounded-xl transition-all text-sm border border-emerald-500/20"
+              title="Compartilhar Orçamento via WhatsApp"
+            >
+              <MessageCircle className="w-4 h-4" />
+              <span className="hidden sm:inline">WhatsApp</span>
             </button>
 
             <PrintReceiptButton onPrint={handlePrint} />

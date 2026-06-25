@@ -18,8 +18,6 @@ import { apiGet } from '@/lib/api';
 import { useAuthStore } from '@/stores/auth';
 import { useAppStore, type Screen } from '@/stores/app';
 
-// ── Types ──────────────────────────────────────────────────────────────────
-
 interface SearchResult {
   id: string;
   name: string;
@@ -78,11 +76,8 @@ interface EstoqueItem {
   empresa_id: string;
 }
 
-// ── Constants ──────────────────────────────────────────────────────────────
-
 const STORAGE_KEY = 'autotec-recent-searches';
 const MAX_RECENT = 5;
-const DEBOUNCE_MS = 300;
 
 const categoryConfig = {
   os: {
@@ -115,18 +110,8 @@ const categoryConfig = {
   },
 } as const;
 
-// ── Helpers ────────────────────────────────────────────────────────────────
-
 function formatCurrency(value: number): string {
   return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value);
-}
-
-function formatDate(dateStr: string): string {
-  try {
-    return new Date(dateStr).toLocaleDateString('pt-BR');
-  } catch {
-    return dateStr;
-  }
 }
 
 function getRecentSearches(): RecentSearch[] {
@@ -152,12 +137,10 @@ function clearRecentSearches() {
   localStorage.removeItem(STORAGE_KEY);
 }
 
-// ── Component ──────────────────────────────────────────────────────────────
-
 export default function GlobalSearch() {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
-  const [results, setResults] = useState<SearchResult[]>([]);
+  const [debouncedQuery, setDebouncedQuery] = useState('');
   const [loading, setLoading] = useState(false);
   const [dataLoaded, setDataLoaded] = useState(false);
   const [recentSearches, setRecentSearches] = useState<RecentSearch[]>([]);
@@ -168,12 +151,10 @@ export default function GlobalSearch() {
   const listRef = useRef<HTMLDivElement>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // In-memory cache of all items
+  // CACHE PERSISTENTE NA MEMÓRIA DA SESSÃO
   const allItemsRef = useRef<SearchResult[]>([]);
-
   const user = useAuthStore((s) => s.user);
 
-  // ── Fetch all data once when modal opens ──
   const fetchData = useCallback(async () => {
     if (!user?.empresa_id || dataLoaded) return;
     setLoading(true);
@@ -183,12 +164,11 @@ export default function GlobalSearch() {
         apiGet<{ ultimas_os: OSItem[] }>(`/dashboards/${user.empresa_id}`),
         apiGet<Cliente[]>(`/clientes?empresa_id=${user.empresa_id}`),
         apiGet<Veiculo[]>(`/veiculos?empresa_id=${user.empresa_id}`),
-        apiGet<{ itens: EstoqueItem[] }>(`/estoque?empresa_id=${user.empresa_id}`),
+        apiGet<{ itens: EstoqueItem[] }>(`/estoque/${user.empresa_id}`),
       ]);
 
       const items: SearchResult[] = [];
 
-      // OS
       const osList = dashboardRes.status === 'fulfilled' ? dashboardRes.value?.ultimas_os || [] : [];
       for (const os of osList) {
         items.push({
@@ -201,7 +181,6 @@ export default function GlobalSearch() {
         });
       }
 
-      // Clientes
       const clientesList = clientesRes.status === 'fulfilled' ? clientesRes.value || [] : [];
       for (const c of clientesList) {
         items.push({
@@ -214,7 +193,6 @@ export default function GlobalSearch() {
         });
       }
 
-      // Veículos
       const veiculosList = veiculosRes.status === 'fulfilled' ? veiculosRes.value || [] : [];
       for (const v of veiculosList) {
         items.push({
@@ -227,7 +205,6 @@ export default function GlobalSearch() {
         });
       }
 
-      // Estoque
       const estoqueList = estoqueRes.status === 'fulfilled' ? estoqueRes.value?.itens || [] : [];
       for (const e of estoqueList) {
         items.push({
@@ -243,15 +220,26 @@ export default function GlobalSearch() {
       allItemsRef.current = items;
       setDataLoaded(true);
     } catch {
-      // Silently fail
+      // Falha silenciosa
     } finally {
       setLoading(false);
     }
   }, [user?.empresa_id, dataLoaded]);
 
-  // ── Filter results client-side ──
+  // DEBOUNCE OTIMIZADO PARA 100ms (Mais fluido e agressivo)
+  useEffect(() => {
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => {
+      setDebouncedQuery(query);
+      setActiveIndex(-1);
+    }, 100);
+    return () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+    };
+  }, [query]);
+
   const filteredResults = useMemo(() => {
-    const q = query.trim().toLowerCase();
+    const q = debouncedQuery.trim().toLowerCase();
     if (!q || !dataLoaded) return allItemsRef.current;
 
     return allItemsRef.current.filter((item) => {
@@ -260,9 +248,8 @@ export default function GlobalSearch() {
         item.secondary.toLowerCase().includes(q)
       );
     });
-  }, [query, dataLoaded]);
+  }, [debouncedQuery, dataLoaded]);
 
-  // ── Group results by category ──
   const grouped = useMemo(() => {
     const groups: Record<string, SearchResult[]> = {};
     for (const r of filteredResults) {
@@ -272,18 +259,14 @@ export default function GlobalSearch() {
     return groups;
   }, [filteredResults]);
 
-  // Flat list for keyboard navigation
-  const flatResults = useMemo(() => {
-    return filteredResults;
-  }, [filteredResults]);
+  const flatResults = useMemo(() => filteredResults, [filteredResults]);
 
-  // ── Open / Close ──
   const openModal = useCallback(() => {
     setOpen(true);
     setQuery('');
+    setDebouncedQuery('');
     setActiveIndex(-1);
     setRecentSearches(getRecentSearches());
-    // Small delay for animation
     requestAnimationFrame(() => {
       setVisible(true);
       setTimeout(() => inputRef.current?.focus(), 50);
@@ -295,39 +278,22 @@ export default function GlobalSearch() {
     setTimeout(() => {
       setOpen(false);
       setQuery('');
-      setResults([]);
+      setDebouncedQuery('');
       setActiveIndex(-1);
-      setDataLoaded(false);
-      allItemsRef.current = [];
+      // Fim do confisco: Os dados em cache (allItemsRef) SÃO MANTIDOS para a próxima busca.
     }, 200);
   }, []);
 
-  // Listen for custom event from KeyboardShortcuts
   useEffect(() => {
     const handler = () => openModal();
     window.addEventListener('open-global-search', handler);
     return () => window.removeEventListener('open-global-search', handler);
   }, [openModal]);
 
-  // Fetch data when modal opens
   useEffect(() => {
-    if (open) {
-      fetchData();
-    }
+    if (open) fetchData();
   }, [open, fetchData]);
 
-  // ── Debounced query change for filtering (instant since client-side) ──
-  useEffect(() => {
-    if (debounceRef.current) clearTimeout(debounceRef.current);
-    debounceRef.current = setTimeout(() => {
-      setActiveIndex(-1);
-    }, 100);
-    return () => {
-      if (debounceRef.current) clearTimeout(debounceRef.current);
-    };
-  }, [query]);
-
-  // ── Keyboard navigation ──
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
       switch (e.key) {
@@ -335,27 +301,19 @@ export default function GlobalSearch() {
           e.preventDefault();
           closeModal();
           break;
-
         case 'ArrowDown':
           e.preventDefault();
-          setActiveIndex((prev) =>
-            prev < flatResults.length - 1 ? prev + 1 : 0
-          );
+          setActiveIndex((prev) => (prev < flatResults.length - 1 ? prev + 1 : 0));
           break;
-
         case 'ArrowUp':
           e.preventDefault();
-          setActiveIndex((prev) =>
-            prev > 0 ? prev - 1 : flatResults.length - 1
-          );
+          setActiveIndex((prev) => (prev > 0 ? prev - 1 : flatResults.length - 1));
           break;
-
         case 'Enter':
           e.preventDefault();
           if (activeIndex >= 0 && activeIndex < flatResults.length) {
             handleSelect(flatResults[activeIndex]);
           } else if (query.trim()) {
-            // Navigate with query if no result selected
             saveRecentSearch(query.trim());
             closeModal();
           }
@@ -365,7 +323,6 @@ export default function GlobalSearch() {
     [flatResults, activeIndex, query, closeModal]
   );
 
-  // ── Select a result ──
   const handleSelect = useCallback(
     (result: SearchResult) => {
       saveRecentSearch(query.trim() || result.name);
@@ -375,36 +332,27 @@ export default function GlobalSearch() {
     [query, closeModal]
   );
 
-  // ── Click a recent search ──
-  const handleRecentClick = useCallback(
-    (recentQuery: string) => {
-      setQuery(recentQuery);
-      setTimeout(() => inputRef.current?.focus(), 0);
-    },
-    []
-  );
+  const handleRecentClick = useCallback((recentQuery: string) => {
+    setQuery(recentQuery);
+    setTimeout(() => inputRef.current?.focus(), 0);
+  }, []);
 
-  // ── Clear recent searches ──
   const handleClearRecent = useCallback(() => {
     clearRecentSearches();
     setRecentSearches([]);
   }, []);
 
-  // Scroll active item into view
   useEffect(() => {
     if (activeIndex < 0 || !listRef.current) return;
     const items = listRef.current.querySelectorAll('[data-search-item]');
     const el = items[activeIndex] as HTMLElement | undefined;
-    if (el) {
-      el.scrollIntoView({ block: 'nearest' });
-    }
+    if (el) el.scrollIntoView({ block: 'nearest' });
   }, [activeIndex]);
 
-  // ── Render ──
   if (!open) return null;
 
-  const showRecent = !query.trim() && !loading && recentSearches.length > 0;
-  const showEmpty = query.trim() && !loading && flatResults.length === 0;
+  const showRecent = !debouncedQuery.trim() && !loading && recentSearches.length > 0;
+  const showEmpty = debouncedQuery.trim() && !loading && flatResults.length === 0;
   const showLoading = loading;
   const showResults = !loading && flatResults.length > 0;
 
@@ -413,30 +361,19 @@ export default function GlobalSearch() {
   return (
     <div
       className={`fixed inset-0 z-[100] flex items-start justify-center pt-[10vh] md:pt-[15vh] transition-all duration-200 ${
-        visible
-          ? 'opacity-100 pointer-events-auto'
-          : 'opacity-0 pointer-events-none'
+        visible ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'
       }`}
       onClick={(e) => {
         if (e.target === e.currentTarget) closeModal();
       }}
     >
-      {/* Backdrop */}
-      <div
-        className="absolute inset-0 bg-black/70 backdrop-blur-sm"
-        onClick={closeModal}
-      />
-
-      {/* Modal */}
+      <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={closeModal} />
       <div
         className={`relative w-[94vw] max-w-2xl bg-zinc-900 border border-zinc-800 rounded-2xl shadow-2xl shadow-black/60 overflow-hidden transition-all duration-200 ${
-          visible
-            ? 'scale-100 opacity-100'
-            : 'scale-95 opacity-0'
+          visible ? 'scale-100 opacity-100' : 'scale-95 opacity-0'
         }`}
         onKeyDown={handleKeyDown}
       >
-        {/* ── Search Input ── */}
         <div className="flex items-center gap-3 px-4 py-3.5 border-b border-zinc-800/80">
           <Search className="w-5 h-5 text-zinc-500 flex-shrink-0" />
           <input
@@ -449,10 +386,7 @@ export default function GlobalSearch() {
           />
           {query && (
             <button
-              onClick={() => {
-                setQuery('');
-                inputRef.current?.focus();
-              }}
+              onClick={() => { setQuery(''); inputRef.current?.focus(); }}
               className="p-1 rounded-md text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800/60 transition-colors"
             >
               <X className="w-4 h-4" />
@@ -464,12 +398,7 @@ export default function GlobalSearch() {
           </div>
         </div>
 
-        {/* ── Content Area ── */}
-        <div
-          ref={listRef}
-          className="max-h-[50vh] md:max-h-[60vh] overflow-y-auto custom-scrollbar"
-        >
-          {/* Loading State */}
+        <div ref={listRef} className="max-h-[50vh] md:max-h-[60vh] overflow-y-auto custom-scrollbar">
           {showLoading && (
             <div className="flex flex-col items-center justify-center py-16 gap-3">
               <Loader2 className="w-6 h-6 text-emerald-400 animate-spin" />
@@ -478,22 +407,18 @@ export default function GlobalSearch() {
             </div>
           )}
 
-          {/* Recent Searches */}
           {showRecent && (
             <div className="p-2">
               <div className="flex items-center justify-between px-3 pt-2 pb-1.5">
                 <div className="flex items-center gap-2">
                   <Clock className="w-3.5 h-3.5 text-zinc-600" />
-                  <span className="text-[11px] font-bold uppercase tracking-wider text-zinc-600">
-                    Buscas recentes
-                  </span>
+                  <span className="text-[11px] font-bold uppercase tracking-wider text-zinc-600">Buscas recentes</span>
                 </div>
                 <button
                   onClick={handleClearRecent}
                   className="flex items-center gap-1 px-2 py-1 rounded-md text-[11px] text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800/60 transition-colors"
                 >
-                  <Trash2 className="w-3 h-3" />
-                  <span>Limpar</span>
+                  <Trash2 className="w-3 h-3" /><span>Limpar</span>
                 </button>
               </div>
               <div className="space-y-0.5 mt-1">
@@ -512,7 +437,6 @@ export default function GlobalSearch() {
             </div>
           )}
 
-          {/* No Results */}
           {showEmpty && (
             <div className="flex flex-col items-center justify-center py-16 gap-3">
               <div className="w-14 h-14 rounded-2xl bg-zinc-800/50 border border-zinc-800 flex items-center justify-center">
@@ -525,7 +449,6 @@ export default function GlobalSearch() {
             </div>
           )}
 
-          {/* Results */}
           {showResults && (
             <div className="p-2">
               {Object.entries(grouped).map(([category, items]) => {
@@ -535,18 +458,11 @@ export default function GlobalSearch() {
 
                 return (
                   <div key={category} className="mb-1 last:mb-0">
-                    {/* Category Header */}
                     <div className="flex items-center gap-2 px-3 pt-3 pb-1.5">
                       <CategoryIcon className={`w-3.5 h-3.5 ${config.iconColor}`} />
-                      <span className="text-[11px] font-bold uppercase tracking-wider text-zinc-500">
-                        {config.label}
-                      </span>
-                      <span className="text-[10px] text-zinc-700 font-medium tabular-nums">
-                        {items.length}
-                      </span>
+                      <span className="text-[11px] font-bold uppercase tracking-wider text-zinc-500">{config.label}</span>
+                      <span className="text-[10px] text-zinc-700 font-medium tabular-nums">{items.length}</span>
                     </div>
-
-                    {/* Items */}
                     <div className="space-y-0.5">
                       {items.map((item) => {
                         resultIndex++;
@@ -560,47 +476,18 @@ export default function GlobalSearch() {
                             onClick={() => handleSelect(item)}
                             onMouseEnter={() => setActiveIndex(idx)}
                             className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-left transition-all duration-150 group ${
-                              isActive
-                                ? 'bg-emerald-500/10 border border-emerald-500/20'
-                                : 'hover:bg-zinc-800/50 border border-transparent'
+                              isActive ? 'bg-emerald-500/10 border border-emerald-500/20' : 'hover:bg-zinc-800/50 border border-transparent'
                             }`}
                           >
-                            {/* Icon */}
-                            <div
-                              className={`flex-shrink-0 w-9 h-9 rounded-lg ${config.iconBg} flex items-center justify-center`}
-                            >
+                            <div className={`flex-shrink-0 w-9 h-9 rounded-lg ${config.iconBg} flex items-center justify-center`}>
                               <CategoryIcon className={`w-4 h-4 ${config.iconColor}`} />
                             </div>
-
-                            {/* Text */}
                             <div className="flex-1 min-w-0">
-                              <p
-                                className={`text-sm font-medium truncate ${
-                                  isActive ? 'text-white' : 'text-zinc-300'
-                                }`}
-                              >
-                                {item.name}
-                              </p>
-                              <p className="text-xs text-zinc-500 truncate mt-0.5">
-                                {item.secondary}
-                              </p>
+                              <p className={`text-sm font-medium truncate ${isActive ? 'text-white' : 'text-zinc-300'}`}>{item.name}</p>
+                              <p className="text-xs text-zinc-500 truncate mt-0.5">{item.secondary}</p>
                             </div>
-
-                            {/* Badge */}
-                            <span
-                              className={`flex-shrink-0 hidden sm:inline-flex items-center px-2 py-0.5 text-[10px] font-bold rounded-full border ${config.badge}`}
-                            >
-                              {config.label}
-                            </span>
-
-                            {/* Arrow hint on hover/active */}
-                            <ArrowRight
-                              className={`w-4 h-4 flex-shrink-0 transition-all duration-150 ${
-                                isActive
-                                  ? 'text-emerald-400 opacity-100'
-                                  : 'text-zinc-700 opacity-0 group-hover:opacity-100'
-                              }`}
-                            />
+                            <span className={`flex-shrink-0 hidden sm:inline-flex items-center px-2 py-0.5 text-[10px] font-bold rounded-full border ${config.badge}`}>{config.label}</span>
+                            <ArrowRight className={`w-4 h-4 flex-shrink-0 transition-all duration-150 ${isActive ? 'text-emerald-400 opacity-100' : 'text-zinc-700 opacity-0 group-hover:opacity-100'}`} />
                           </button>
                         );
                       })}
@@ -611,8 +498,7 @@ export default function GlobalSearch() {
             </div>
           )}
 
-          {/* Initial empty state (no query, no recent, not loading) */}
-          {!loading && !query.trim() && recentSearches.length === 0 && dataLoaded && flatResults.length === 0 && (
+          {!loading && !debouncedQuery.trim() && recentSearches.length === 0 && dataLoaded && flatResults.length === 0 && (
             <div className="flex flex-col items-center justify-center py-12 gap-3">
               <div className="w-14 h-14 rounded-2xl bg-zinc-800/50 border border-zinc-800 flex items-center justify-center">
                 <Search className="w-6 h-6 text-zinc-700" />
@@ -625,27 +511,11 @@ export default function GlobalSearch() {
           )}
         </div>
 
-        {/* ── Footer ── */}
         <div className="flex items-center justify-between px-4 py-2.5 border-t border-zinc-800/60 bg-zinc-900/50">
           <div className="flex items-center gap-3">
-            <span className="flex items-center gap-1.5 text-[11px] text-zinc-600">
-              <kbd className="inline-flex items-center px-1.5 py-0.5 rounded bg-zinc-800 border border-zinc-700/50 text-[10px] text-zinc-500 font-mono">
-                ↑↓
-              </kbd>
-              <span>navegar</span>
-            </span>
-            <span className="flex items-center gap-1.5 text-[11px] text-zinc-600">
-              <kbd className="inline-flex items-center px-1.5 py-0.5 rounded bg-zinc-800 border border-zinc-700/50 text-[10px] text-zinc-500 font-mono">
-                ↵
-              </kbd>
-              <span>abrir</span>
-            </span>
-            <span className="flex items-center gap-1.5 text-[11px] text-zinc-600">
-              <kbd className="inline-flex items-center px-1.5 py-0.5 rounded bg-zinc-800 border border-zinc-700/50 text-[10px] text-zinc-500 font-mono">
-                esc
-              </kbd>
-              <span>fechar</span>
-            </span>
+            <span className="flex items-center gap-1.5 text-[11px] text-zinc-600"><kbd className="inline-flex items-center px-1.5 py-0.5 rounded bg-zinc-800 border border-zinc-700/50 text-[10px] text-zinc-500 font-mono">↑↓</kbd><span>navegar</span></span>
+            <span className="flex items-center gap-1.5 text-[11px] text-zinc-600"><kbd className="inline-flex items-center px-1.5 py-0.5 rounded bg-zinc-800 border border-zinc-700/50 text-[10px] text-zinc-500 font-mono">↵</kbd><span>abrir</span></span>
+            <span className="flex items-center gap-1.5 text-[11px] text-zinc-600"><kbd className="inline-flex items-center px-1.5 py-0.5 rounded bg-zinc-800 border border-zinc-700/50 text-[10px] text-zinc-500 font-mono">esc</kbd><span>fechar</span></span>
           </div>
           <div className="flex items-center gap-1.5 text-[11px] text-zinc-600">
             <Package className="w-3 h-3" />

@@ -69,8 +69,14 @@ const baseFabActions: FabAction[] = [
 export default function MobileFAB() {
   const [open, setOpen] = useState(false);
   const navigate = useAppStore((s) => s.navigate);
+  const currentScreen = useAppStore((s) => s.currentScreen); 
   const user = useAuthStore((s) => s.user);
   const fabRef = useRef<HTMLDivElement>(null);
+
+  // Fecha o menu automaticamente se a tela mudar
+  useEffect(() => {
+    setOpen(false);
+  }, [currentScreen]);
 
   // Filter actions by role
   const fabActions = useMemo(() => {
@@ -109,45 +115,55 @@ export default function MobileFAB() {
     }
   }, [open]);
 
+  // Se for tela de OS, o botão some para liberar espaço de tela
+  if (currentScreen === 'detalhes-os' || currentScreen === 'nova-os') {
+    return null; 
+  }
+
   return (
-    <div ref={fabRef} className="md:hidden fixed bottom-6 right-5 z-30">
+    <div ref={fabRef} className="md:hidden fixed bottom-6 right-5 z-[100]">
       {/* Backdrop overlay when open */}
       {open && (
         <div
-          className="fixed inset-0 bg-[radial-gradient(circle_at_bottom_right,rgba(0,0,0,0.4),transparent_70%)] backdrop-blur-[2px] animate-in fade-in duration-200"
-          onClick={() => setOpen(false)}
+          className="fixed inset-0 bg-black/40 backdrop-blur-[2px] animate-in fade-in duration-200"
+          onClick={(e) => {
+            e.stopPropagation();
+            setOpen(false);
+          }}
         />
       )}
 
-      {/* Action buttons */}
-      <div className="absolute bottom-16 right-0 flex flex-col items-end gap-3">
-        {fabActions.map((action, i) => (
-          <div
-            key={action.screen}
-            className="flex items-center gap-3 animate-in slide-in-from-right-2 fade-in duration-200"
-            style={{ animationDelay: open ? `${i * 50}ms` : '0ms', animationFillMode: 'both' }}
-          >
-            {/* Label pill — glass card with colored dot */}
-            <span className="glass-card px-3 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap text-zinc-200 shadow-lg shadow-black/30">
-              <span className={`inline-block w-1.5 h-1.5 rounded-full ${action.dotColor} mr-2 align-middle`} />
-              {action.label}
-            </span>
-            {/* Icon button — glass with border glow */}
-            <button
-              onClick={() => handleAction(action.screen)}
-              className={`
-                w-12 h-12 rounded-xl border flex items-center justify-center
-                backdrop-blur-sm transition-all duration-200 active:scale-95
-                shadow-lg shadow-black/30
-                ${action.bg} ${action.color}
-                hover:scale-105 hover:shadow-xl
-              `}
+      {/* Action buttons - AGORA PROTEGIDOS PELO IF DO OPEN */}
+      {open && (
+        <div className="absolute bottom-16 right-0 flex flex-col items-end gap-3">
+          {fabActions.map((action, i) => (
+            <div
+              key={action.screen}
+              className="flex items-center gap-3 animate-in slide-in-from-right-2 fade-in duration-200"
+              style={{ animationDelay: `${i * 50}ms`, animationFillMode: 'both' }}
             >
-              {action.icon}
-            </button>
-          </div>
-        ))}
-      </div>
+              {/* Label pill — glass card with colored dot */}
+              <span className="glass-card px-3 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap text-zinc-200 shadow-lg shadow-black/30">
+                <span className={`inline-block w-1.5 h-1.5 rounded-full ${action.dotColor} mr-2 align-middle`} />
+                {action.label}
+              </span>
+              {/* Icon button — glass with border glow */}
+              <button
+                onClick={() => handleAction(action.screen)}
+                className={`
+                  w-12 h-12 rounded-xl border flex items-center justify-center
+                  backdrop-blur-sm transition-all duration-200 active:scale-95
+                  shadow-lg shadow-black/30
+                  ${action.bg} ${action.color}
+                  hover:scale-105 hover:shadow-xl
+                `}
+              >
+                {action.icon}
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
 
       {/* Main FAB button — glass morphism */}
       <button

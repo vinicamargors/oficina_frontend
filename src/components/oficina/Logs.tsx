@@ -41,13 +41,13 @@ import { toast } from 'sonner';
 /* ───────────────────── Types ───────────────────── */
 
 interface LogEntry {
-  id: string;
+  id: string | number;
   usuario_nome?: string;
   tabela: string;
   operacao: 'INSERT' | 'UPDATE' | 'DELETE';
-  dados_antigos?: unknown;
-  dados_novos?: unknown;
-  created_at: string;
+  dados_antes?: unknown;   // <--- Trocou de dados_antigos
+  dados_depois?: unknown;  // <--- Trocou de dados_novos
+  criado_em: string;       // <--- Trocou de created_at
 }
 
 interface LogFilters {
@@ -559,12 +559,12 @@ export default function Logs() {
                     const opBorder = OP_BORDER[log.operacao] || '';
                     const OpIcon = OP_ICON[log.operacao];
                     const tabelaStyle = getTabelaStyle(log.tabela);
-                    const dt = formatDateTime(log.created_at);
+                    const dt = formatDateTime(log.criado_em);
 
                     return (
                       <tr key={log.id} className={`hover:bg-zinc-800/40 transition-colors group ${opBorder}`}>
                         <td className="px-5 py-3 whitespace-nowrap">
-                          <div className="text-xs text-zinc-300 tabular-nums font-medium" title={relativeTimeLog(log.created_at)}>{dt.date}</div>
+                          <div className="text-xs text-zinc-300 tabular-nums font-medium" title={relativeTimeLog(log.criado_em)}>{dt.date}</div>
                           <div className="text-[10px] text-zinc-600 font-mono tabular-nums mt-0.5">{dt.time}</div>
                         </td>
                         <td className="px-5 py-3 text-zinc-400 text-xs hidden sm:table-cell font-medium">{log.usuario_nome || '—'}</td>
@@ -580,7 +580,7 @@ export default function Logs() {
                         </td>
                         <td className="px-5 py-3 hidden md:table-cell">
                           <div className="text-[10px] text-zinc-500 font-mono max-w-xs truncate bg-zinc-950 px-2 py-1 rounded border border-zinc-800/50">
-                            {truncateDetails(log.dados_novos || log.dados_antigos)}
+                            {truncateDetails(log.dados_depois || log.dados_antes)}
                           </div>
                         </td>
                       </tr>

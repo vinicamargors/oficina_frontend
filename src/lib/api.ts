@@ -2,8 +2,6 @@ import { supabase } from './supabase';
 import { toastApiError } from './toast';
 import { useMasterStore } from '@/stores/master';
 
-
-
 const BASE_URL = 'https://autotec-backend.onrender.com/api/v1';
 
 async function getAuthHeaders(): Promise<Record<string, string>> {
@@ -38,7 +36,8 @@ async function getAuthHeaders(): Promise<Record<string, string>> {
   return headers;
 }
 
-async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
+// Adicionamos o parâmetro `retries` para blindar falhas de rede e servidores dormindo
+async function request<T>(method: string, path: string, body?: unknown, retries = 1): Promise<T> {
   const headers = await getAuthHeaders();
   const config: RequestInit = {
     method,
@@ -49,7 +48,20 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
     config.body = JSON.stringify(body);
   }
 
-  const response = await fetch(`${BASE_URL}${path}`, config);
+  let response: Response;
+
+  try {
+    response = await fetch(`${BASE_URL}${path}`, config);
+  } catch (error: any) {
+    // Se for erro de rede (Failed to fetch) e for um GET, tentamos de novo silenciosamente
+    if (retries > 0 && method === 'GET') {
+      console.warn(`[AutoTec API] Falha na rede ao acessar ${path}. O servidor pode estar acordando. Retentando em 1s...`);
+      await new Promise(resolve => setTimeout(resolve, 1000)); // Espera 1 segundo
+      return request<T>(method, path, body, retries - 1);
+    }
+    // Se acabarem as tentativas ou não for GET, lança um erro amigável
+    throw new Error('Erro de conexão: O servidor está indisponível ou a rede falhou. Tente novamente em instantes.');
+  }
 
   if (!response.ok) {
     const errorData = await response.json().catch(() => ({}));
@@ -71,7 +83,7 @@ export async function apiGet<T = unknown>(path: string): Promise<T> {
 }
 
 export async function apiPost<T = unknown>(path: string, body?: unknown): Promise<T> {
-  return request<T>('POST', path, body);
+  return request<T>('POST', path, body); // POST não tem retry automático por segurança (evitar duplicidade)
 }
 
 export async function apiPut<T = unknown>(path: string, body?: unknown): Promise<T> {

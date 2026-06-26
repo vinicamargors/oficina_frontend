@@ -1,19 +1,29 @@
 import { create } from 'zustand';
+import { persist } from 'zustand/middleware';
 
 export interface EmpresaResumida {
   id: string;
-  nome: string | null;   // ← pode vir null do backend
-  cnpj?: string | null;
-  cidade?: string | null;
-  ativo: boolean;
+  nome?: string;
+  nome_fantasia?: string;
+  razao_social?: string;
+  cnpj?: string;
+  cidade?: string;
+  ativo?: boolean;
 }
 
-interface MasterStore {
+interface MasterState {
   empresaSelecionada: EmpresaResumida | null;
   setEmpresaSelecionada: (empresa: EmpresaResumida | null) => void;
 }
 
-export const useMasterStore = create<MasterStore>((set) => ({
-  empresaSelecionada: null,
-  setEmpresaSelecionada: (empresa) => set({ empresaSelecionada: empresa }),
-}));
+export const useMasterStore = create<MasterState>()(
+  persist(
+    (set) => ({
+      empresaSelecionada: null,
+      setEmpresaSelecionada: (empresa) => set({ empresaSelecionada: empresa }),
+    }),
+    {
+      name: 'autotec-master-storage', // O cofre forte que vai salvar a sessão no disco do navegador
+    }
+  )
+);

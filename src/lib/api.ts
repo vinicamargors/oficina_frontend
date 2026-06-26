@@ -1,6 +1,7 @@
 import { supabase } from './supabase';
 import { toastApiError } from './toast';
 import { useMasterStore } from '@/stores/master';
+import { useAuthStore } from '@/stores/auth';
 
 const BASE_URL = 'https://autotec-backend.onrender.com/api/v1';
 
@@ -10,25 +11,31 @@ async function getAuthHeaders(): Promise<Record<string, string>> {
   };
 
   try {
+    // 1. Pega o token do Supabase
     const { data: { session } } = await supabase.auth.getSession();
     if (session?.access_token) {
       headers['Authorization'] = `Bearer ${session.access_token}`;
     }
 
-    if (typeof window !== 'undefined') {
-      const cached = localStorage.getItem('autotec-user');
-      if (cached) {
-        try {
-          const user = JSON.parse(cached);
-          if (user?.cargo) headers['x-cargo'] = user.cargo;
-        } catch { /* ignore */ }
-      }
+    // 2. Recupera o usuário atual direto do estado global
+    const user = useAuthStore.getState().user;
+
+    if (user?.cargo) {
+      headers['x-cargo'] = user.cargo;
     }
 
-    // Master: injeta empresa selecionada no header
+    // 3. Define qual empresa_id enviar (Dono vs Master)
+    let empresaIdParaEnviar = user?.empresa_id;
+
+    // Se for master e tiver selecionado uma empresa no lobby, ele assume o controle dela
     const empresaSelecionada = useMasterStore.getState().empresaSelecionada;
-    if (empresaSelecionada?.id) {
-      headers['x-empresa-id'] = empresaSelecionada.id;
+    if (user?.cargo === 'master' && empresaSelecionada?.id) {
+      empresaIdParaEnviar = empresaSelecionada.id;
+    }
+
+    // 4. Só envia o header se for um ID de verdade (evita o erro 422 do backend)
+    if (empresaIdParaEnviar && empresaIdParaEnviar !== 'undefined' && empresaIdParaEnviar !== 'null') {
+      headers['x-empresa-id'] = empresaIdParaEnviar;
     }
 
   } catch { /* ignore */ }
@@ -36,7 +43,7 @@ async function getAuthHeaders(): Promise<Record<string, string>> {
   return headers;
 }
 
-// Adicionamos o parâmetro `retries` para blindar falhas de rede e servidores dormindo
+// O Auto-Retry continua aqui para segurar a onda se o Render dormir
 async function request<T>(method: string, path: string, body?: unknown, retries = 1): Promise<T> {
   const headers = await getAuthHeaders();
   const config: RequestInit = {
@@ -59,18 +66,17 @@ async function request<T>(method: string, path: string, body?: unknown, retries 
       await new Promise(resolve => setTimeout(resolve, 1000)); // Espera 1 segundo
       return request<T>(method, path, body, retries - 1);
     }
-    // Se acabarem as tentativas ou não for GET, lança um erro amigável
     throw new Error('Erro de conexão: O servidor está indisponível ou a rede falhou. Tente novamente em instantes.');
   }
 
   if (!response.ok) {
     const errorData = await response.json().catch(() => ({}));
+    // Mostra o 'detail' do Pydantic se existir, senão vai a mensagem genérica
     throw new Error(
-      errorData?.message || errorData?.error || `Erro ${response.status}: ${response.statusText}`
+      errorData?.detail || errorData?.message || errorData?.error || `Erro ${response.status}: ${response.statusText}`
     );
   }
 
-  // Handle 204 No Content
   if (response.status === 204) {
     return undefined as T;
   }
@@ -83,7 +89,7 @@ export async function apiGet<T = unknown>(path: string): Promise<T> {
 }
 
 export async function apiPost<T = unknown>(path: string, body?: unknown): Promise<T> {
-  return request<T>('POST', path, body); // POST não tem retry automático por segurança (evitar duplicidade)
+  return request<T>('POST', path, body); // POST sem retry pra não duplicar registro
 }
 
 export async function apiPut<T = unknown>(path: string, body?: unknown): Promise<T> {
@@ -98,7 +104,6 @@ export async function apiDelete<T = unknown>(path: string): Promise<T> {
   return request<T>('DELETE', path);
 }
 
-// Convenience functions that auto-toast on error
 export async function apiGetWithToast<T = unknown>(path: string, fallbackMsg?: string): Promise<T | undefined> {
   try {
     return await apiGet<T>(path);

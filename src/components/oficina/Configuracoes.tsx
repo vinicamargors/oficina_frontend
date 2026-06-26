@@ -29,6 +29,7 @@ import {
 } from 'lucide-react';
 import { apiGet, apiPost, apiPut, apiDelete } from '@/lib/api';
 import { useAuthStore } from '@/stores/auth';
+import { useMasterStore } from '@/stores/master'; // <--- ADICIONADO AQUI
 import type { UsuarioProfile } from '@/stores/auth';
 import { toast } from 'sonner';
 
@@ -502,7 +503,10 @@ function FieldInput({
 
 export default function Configuracoes() {
   const user = useAuthStore((s) => s.user);
-  const empresaId = user?.empresa_id || '';
+  const empresaSelecionada = useMasterStore((s) => s.empresaSelecionada); // <--- ADICIONADO AQUI
+  
+  // A SACADA ANCAP AQUI: Pega da store correta pra evitar mandar requisição com 'undefined'
+  const empresaId = user?.cargo === 'master' ? empresaSelecionada?.id : user?.empresa_id;
 
   const [tab, setTab] = useState<TabKey>('empresa');
 
@@ -535,9 +539,8 @@ export default function Configuracoes() {
     if (!empresaId) return;
     setEmpresaLoading(true);
     try {
-      // Puxa a lista inteira e filtra para liberar o carregamento para o MASTER
-      const res = await apiGet<any[]>('/empresas');
-      const data = res.find((e) => e.id === empresaId);
+      // Vai direto na artéria, sem listar tudo pra evitar erro de Pydantic
+      const data = await apiGet<any>(`/empresas/${empresaId}`);
       
       if (data) {
         setEmpresa({
@@ -1114,5 +1117,3 @@ export default function Configuracoes() {
     </div>
   );
 }
-
-
